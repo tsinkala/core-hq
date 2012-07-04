@@ -1,4 +1,4 @@
-{% extends 'app_manager/apps_base.html'%}
+{% extends 'app_manager/managed_app.html'%}
 {% load xforms_extras %}
 {% load hq_shared_tags %}
 
@@ -104,7 +104,6 @@
 {% endblock %}
 
 {% block app-content %}
-    {% include 'app_manager/partials/release-manager-nav.html' %}
     <div id="breadcrumbs">
         <ul>
             <li><a href="{% url view_app domain app.id %}?edit=true">{{ app.name }}</a></li>

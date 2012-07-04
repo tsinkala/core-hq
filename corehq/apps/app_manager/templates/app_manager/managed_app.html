@@ -15,13 +15,8 @@
     {% endif %}
 {% endblock %}
 {% block app-content %}
-    <div id="modules-form-view-wrapper" class="sidebar-wrapper">
+    {% block form-view %}
 
-        <div class="next-to-sidebar">
-            {% block form-view %}
-
-            {% endblock %}
-        </div>
-    </div>
+    {% endblock %}
 
 {% endblock %}
