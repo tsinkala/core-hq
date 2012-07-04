@@ -367,11 +367,10 @@ $(function () {
         });
     }());
 
-    $(".sidebar").addClass('ui-widget ui-widget-content');
-    $(".sidebar h2").addClass('ui-corner-all');
-    $(".sidebar ul li").addClass('ui-corner-all');
-    $(".sidebar ul li div").addClass('ui-corner-top');
-    $(".sidebar ul").addClass('ui-corner-bottom');
+    $(".hq-oldstyle .sidebar h2").addClass('ui-corner-all');
+    $(".hq-oldstyle .sidebar ul li").addClass('ui-corner-all');
+    $(".hq-oldstyle .sidebar ul li div").addClass('ui-corner-top');
+    $(".hq-oldstyle .sidebar ul").addClass('ui-corner-bottom');
 
     COMMCAREHQ.initBlock($("body"));
     setUpIeWarning();
