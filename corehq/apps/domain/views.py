@@ -33,7 +33,7 @@ def select( request,
             redirect_field_name = REDIRECT_FIELD_NAME,
             domain_select_template = 'domain/select.html' ):
     
-    domains_for_user = Domain.active_for_user(request.user)
+    domains_for_user = Domain.active_for_user(request.couch_user or request.user)
     if not domains_for_user:
         return redirect('registration_domain')
     

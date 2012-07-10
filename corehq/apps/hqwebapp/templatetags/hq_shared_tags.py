@@ -98,7 +98,7 @@ def domains_for_user(request, selected_domain=None):
         lst.append('<li><a href="%s">Back to My Projects...</a></li>' % reverse("domain_select"))
         lst.append('<li class="divider"></li>')
     else:
-        domain_list = Domain.active_for_user(request.user)
+        domain_list = Domain.active_for_user(request.couch_user or request.user)
         if len(domain_list) > 0:
             lst.append('<li class="nav-header">My Projects</li>')
             for domain in domain_list:
@@ -117,7 +117,7 @@ def domains_for_user(request, selected_domain=None):
 
 @register.simple_tag
 def list_my_domains(request):
-    domain_list = Domain.active_for_user(request.user)
+    domain_list = Domain.active_for_user(request.couch_user or request.user)
     lst = list()
     lst.append('<ul class="nav nav-pills nav-stacked">')
     for domain in domain_list:

@@ -81,10 +81,14 @@ class Domain(Document):
     @staticmethod
     def active_for_user(user, is_active=True):
         if not hasattr(user,'get_profile'):
+            # TODO: make this work for a couch user
             # this had better be an anonymous user
             return []
         from corehq.apps.users.models import CouchUser
-        couch_user = CouchUser.from_django_user(user)
+        if isinstance(user, CouchUser):
+            couch_user = user
+        else:
+            couch_user = CouchUser.from_django_user(user)
         if couch_user:
             domain_names = couch_user.get_domains()
             def log(json):
