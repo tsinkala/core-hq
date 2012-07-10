@@ -194,6 +194,9 @@ var CaseXML = (function () {
                 self.case_properties(ko.utils.arrayMap(case_properties, function (property) {
                     return SubCase.CaseProperty.wrap(property, self);
                 }));
+                self.repeat_context = ko.computed(function () {
+
+                });
                 self.unwrap = function () {
                     SubCase.unwrap(self);
                 };
@@ -252,7 +255,7 @@ var CaseXML = (function () {
         self.utils.actions.subcases = self.toJS();
     }
     SubCasesViewModel.prototype.getLabel = function (question) {
-        return CaseXML.prototype.truncateLabel(question.label, question.tag == 'hidden' ? ' (Hidden)' : '');
+        return CaseXML.prototype.truncateLabel((question.repeat ? '- ' : '') + question.label, question.tag == 'hidden' ? ' (Hidden)' : '');
     };
     var action_names = ["open_case", "update_case", "close_case", "case_preload"],
         CaseXML = function (params) {
@@ -317,6 +320,8 @@ var CaseXML = (function () {
             if (this.edit) {
                 this.saveButton.ui.prependTo(this.home);
             }
+
+            var questionMap
 
             ko.applyBindings(new SubCasesViewModel(params, this), $('#case-config-ko').get(0));
         };
