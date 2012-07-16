@@ -7,7 +7,7 @@ from corehq.apps.domain.decorators import require_superuser, login_and_domain_re
 from corehq.apps.registration.forms import DomainRegistrationForm
 from corehq.apps.reports.dispatcher import ReportDispatcher
 from corehq.apps.users.decorators import require_permission
-from corehq.apps.users.models import Permissions
+from corehq.apps.users.models import DomainPermissions
 from dimagi.utils.web import render_to_response, json_response, get_url_base
 from corehq.apps.orgs.models import Organization
 from corehq.apps.domain.models import Domain, LICENSES

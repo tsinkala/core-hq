@@ -37,7 +37,7 @@ from corehq.apps.sms.views import get_sms_autocomplete_context
 from corehq.apps.domain.models import Domain
 from corehq.apps.users.decorators import require_permission
 from corehq.apps.users.forms import UserForm, CommCareAccountForm, ProjectSettingsForm
-from corehq.apps.users.models import CouchUser, Invitation, CommCareUser, WebUser, RemoveWebUserRecord, UserRole, AdminUserRole
+from corehq.apps.users.models import CouchUser, Invitation, CommCareUser, WebUser, RemoveWebUserRecord, UserRole, AdminDomainUserRole, DomainUserRole
 from corehq.apps.groups.models import Group
 from corehq.apps.domain.decorators import login_and_domain_required, require_superuser, domain_admin_required
 from dimagi.utils.web import render_to_response, json_response, get_url_base
@@ -112,11 +112,11 @@ def users(request, domain):
 @require_can_edit_web_users
 def web_users(request, domain, template="users/web_users.html"):
     context = _users_context(request, domain)
-    user_roles = [AdminUserRole(domain=domain)]
-    user_roles.extend(sorted(UserRole.by_domain(domain), key=lambda role: role.name if role.name else u'\uFFFF'))
+    user_roles = [AdminDomainUserRole(domain=domain)]
+    user_roles.extend(sorted(DomainUserRole.by_subject(domain), key=lambda role: role.name if role.name else u'\uFFFF'))
     context.update({
         'user_roles': user_roles,
-        'default_role': UserRole.get_default(),
+        'default_role': DomainUserRole.get_default(),
         'report_list': get_possible_reports(domain),
     })
     return render_to_response(request, template, context)

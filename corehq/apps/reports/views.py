@@ -4,7 +4,7 @@ from corehq.apps.reports import util, standard
 from corehq.apps.reports.models import FormExportSchema
 from corehq.apps.users.decorators import require_permission
 from corehq.apps.users.export import export_users
-from corehq.apps.users.models import Permissions
+from corehq.apps.users.models import Permissions, DomainPermissions
 import couchexport
 from couchexport.export import UnsupportedExportFormat, export_raw
 from couchexport.util import FilterFunction
@@ -52,9 +52,9 @@ datespan_default = datespan_in_request(
     default_days=7,
 )
 
-require_form_export_permission = require_permission(Permissions.view_report, 'corehq.apps.reports.standard.ExcelExportReport', login_decorator=None)
-require_case_export_permission = require_permission(Permissions.view_report, 'corehq.apps.reports.standard.CaseExportReport', login_decorator=None)
-require_can_view_all_reports = require_permission(Permissions.view_reports)
+require_form_export_permission = require_permission(DomainPermissions.view_report, 'corehq.apps.reports.standard.ExcelExportReport', login_decorator=None)
+require_case_export_permission = require_permission(DomainPermissions.view_report, 'corehq.apps.reports.standard.CaseExportReport', login_decorator=None)
+require_can_view_all_reports = require_permission(DomainPermissions.view_reports)
 
 @login_and_domain_required
 def default(request, domain, template="reports/report_base.html"):

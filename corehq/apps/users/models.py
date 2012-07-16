@@ -16,6 +16,7 @@ from django.contrib.sites.models import Site
 from django.core.urlresolvers import reverse
 from django.core.exceptions import ValidationError
 from django.template.loader import render_to_string
+from corehq.apps.domain.models import Domain
 
 from couchdbkit.ext.django.schema import *
 from couchdbkit.resource import ResourceNotFound
@@ -390,6 +391,7 @@ class DomainMembership(Membership):
     Each user can have multiple accounts on the
     web domain. This is primarily for Dimagi staff.
     """
+    domain = StringProperty
 
     class classes(object):
         UserRole = DomainUserRole
@@ -426,7 +428,7 @@ class DomainMembership(Membership):
 
 
                 self = super(DomainMembership, cls).wrap(data)
-                self.role_id = UserRole.get_or_create_with_permissions(self.subject, custom_permissions).get_id
+                self.role_id = UserRole.get_or_create_with_permissions(self.domain, custom_permissions).get_id
                 return self
         return super(DomainMembership, cls).wrap(data)
 
@@ -436,6 +438,7 @@ class DomainMembership(Membership):
 
 
 class OrganizationMembership(Membership):
+    organization = StringProperty
 
     class classes(object):
         UserRole = OrganizationUserRole
@@ -459,15 +462,16 @@ class CustomDomainMembership(DomainMembership):
         self.custom_role.domain = self.domain
         self.custom_role.permissions.set(permission, value, data)
 
-class MembershipManager(DocumentSchema):
+class MembershipManager(object):
     #item_class must have fields: name, is_active, date_created
-    def __init__(self, items, item_memberships, item_label, item_membership_label, item_class, item_membership_class):
+    def __init__(self, items, item_memberships, item_label, item_membership_label, item_class, item_membership_class, subject):
         self.items = items
         self.item_memberships = item_memberships
         self.item_label = item_label
         self.item_membership_label = item_membership_label
         self.item_class = item_class
         self.item_membership_class = item_membership_class
+        self.subject = subject
 
     def is_global_admin(self):
         # subclasses to override if they want this functionality
@@ -477,22 +481,24 @@ class MembershipManager(DocumentSchema):
         item_membership = None
         try:
             for i in getattr(instance, self.item_memberships):
-                if i.subject == item:
+                if getattr(i, self.subject) == item:
                     item_membership = i
                     if item not in getattr(instance, self.items):
-                        raise self.Inconsistent(getattr(instance, self.item_label) + "'%s' is in " + getattr(instance, self.item_membership_label) +  "but not domains" % item)
+                        raise CouchUser.Inconsistent(getattr(instance, self.item_label) + "'%s' is in " % item + getattr(instance, self.item_membership_label) +  "but not domains")
+
             if not item_membership and item in getattr(instance, self.items):
-                raise self.Inconsistent(getattr(instance, self.item_label) + " '%s' is in " + getattr(instance, self.item_label) + " but not in " + getattr(instance, self.item_membership_label) + "." % item)
-        except self.Inconsistent as e:
+                raise CouchUser.Inconsistent(getattr(instance, self.item_label) + " '%s' is in " % item + getattr(instance, self.item_label) + " but not in " + getattr(instance, self.item_membership_label))
+        except CouchUser.Inconsistent as e:
             logging.warning(e)
-            setattr(instance, self.items, [i.subject for i in getattr(instance, self.item_memberships)])
+            consistent_list =  [getattr(i, self.subject) for i in getattr(instance, self.item_memberships)]
+            setattr(instance, self.items, consistent_list)
         return item_membership
 
     def add_membership(self, instance, item, **kwargs):
         for i in getattr(instance, self.item_memberships):
             if i.subject == item:
                 if item not in getattr(instance, self.items):
-                    raise self.Inconsistent(getattr(instance, self.item_label) + "'%s' is in " + getattr(instance, self.item_membership_label) +  "but not domains" % item)
+                    raise CouchUser.Inconsistent(getattr(instance, self.item_label) + "'%s' is in " + getattr(instance, self.item_membership_label) +  "but not domains" % item)
                 return
 
         item_obj = self.item_class.get_by_name(item)
@@ -518,8 +524,9 @@ class AuthorizableMixin(DocumentSchema):
     domain_membership_label = 'domain membership'
     domain_class = Domain
     domain_membership_class = DomainMembership
-    
-    domain_manager = MembershipManager(items='domains', item_memberships='domain_memberships', item_label='domain_label', item_membership_label='domain_membership_label', item_class='domain_class', item_membership_class='domain_membership_class')
+
+
+    domain_manager = MembershipManager(items='domains', item_memberships='domain_memberships', item_label='domain_label', item_membership_label='domain_membership_label', item_class='domain_class', item_membership_class='domain_membership_class', subject='domain')
 
     def is_global_admin(self):
         # subclasses to override if they want this functionality
@@ -637,7 +644,7 @@ class AuthorizableMixin(DocumentSchema):
             domain = self.current_domain
 
         if self.is_global_admin():
-            return AdminUserRole(domain=domain)
+            return AdminDomainUserRole(domain=domain)
         if self.is_member_of(domain): #need to have a way of seeing is_member_of
             return self.get_domain_membership(domain).role
         else:
@@ -653,8 +660,8 @@ class AuthorizableMixin(DocumentSchema):
             dm.is_admin = True
         elif role_qualified_id.startswith('user-role:'):
             dm.role_id = role_qualified_id[len('user-role:'):]
-        elif role_qualified_id in PERMISSIONS_PRESETS:
-            preset = PERMISSIONS_PRESETS[role_qualified_id]
+        elif role_qualified_id in DOMAIN_PERMISSIONS_PRESETS:
+            preset = DOMAIN_PERMISSIONS_PRESETS[role_qualified_id]
             dm.role_id = UserRole.get_or_create_with_permissions(domain, preset['permissions'], preset['name']).get_id
         else:
             raise Exception("role_qualified_id is %r" % role_qualified_id)
@@ -1453,7 +1460,7 @@ class WebUser(CouchUser, AuthorizableMixin):
             domain = self.current_domain
 
         if self.is_global_admin():
-            return AdminUserRole(domain=domain)
+            return AdminDomainUserRole(domain=domain)
 
         dm_list = list()
 
@@ -1476,7 +1483,7 @@ class WebUser(CouchUser, AuthorizableMixin):
 
     def total_domain_membership(self, domain_memberships, domain):
         #sort out the permissions
-        total_permission = Permissions()
+        total_permission = DomainPermissions()
         total_reports_list = list()
         if domain_memberships:
             for domain_membership, membership_source in domain_memberships:

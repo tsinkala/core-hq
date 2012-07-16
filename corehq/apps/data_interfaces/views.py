@@ -1,6 +1,6 @@
 from corehq.apps.reports.views import datespan_default
 from corehq.apps.users.decorators import require_permission
-from corehq.apps.users.models import Permissions
+from corehq.apps.users.models import DomainPermissions
 from dimagi.utils.modules import to_function
 from dimagi.utils.web import render_to_response
 from corehq.apps.domain.decorators import login_and_domain_required
@@ -9,7 +9,7 @@ from django.http import HttpResponseNotFound, Http404, HttpResponseRedirect
 from django.conf import settings
 from corehq.apps.reports.dispatcher import ReportDispatcher
 
-require_can_edit_data = require_permission(Permissions.edit_data)
+require_can_edit_data = require_permission(DomainPermissions.edit_data)
 
 @require_can_edit_data
 def default(request, domain, template="data_interfaces/data_interfaces_base.html"):
