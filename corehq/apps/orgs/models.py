@@ -16,6 +16,8 @@ class Organization(Document):
     location = StringProperty()
     logo_filename = StringProperty()
 
+    date_created = DateTimeProperty()
+    is_active = BooleanProperty()
 
     members = StringListProperty()
 
