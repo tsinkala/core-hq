@@ -545,18 +545,36 @@ def view_generic(req, domain, app_id=None, module_id=None, form_id=None, is_user
         'app': app,
         })
     if app:
-        if app.is_remote_app():
-            options = CommCareBuildConfig.fetch().get_menu()
-        else:
-            options = CommCareBuildConfig.fetch().get_menu(app.application_version)
-        is_standard_build = [o.build.to_string() for o in options if o.build.to_string() == app.build_spec.to_string()]
+        if True:
+            # decided to do Application and RemoteApp the same way; might change later
+            versions = ['1.0', '2.0']
+            commcare_build_options = {}
+            for version in versions:
+                options = CommCareBuildConfig.fetch().get_menu(version)
+                options_labels = list()
+                options_builds = list()
+                for option in options:
+                    options_labels.append(option.get_label())
+                    options_builds.append(option.build.to_string())
+                    commcare_build_options[version] = {"options" : options, "labels" : options_labels, "builds" : options_builds}
+
+        app_build_spec_string = app.build_spec.to_string()
+        app_build_spec_label = app.build_spec.get_label()
+
         context.update({
-            "commcare_build_options": options,
-            "is_standard_build": bool(is_standard_build)
+            "commcare_build_options" : commcare_build_options,
+            "app_build_spec_string" : app_build_spec_string,
+            "app_build_spec_label" : app_build_spec_label,
+            "app_version" : app.application_version,
         })
     response = render_to_response(req, template, context)
     response.set_cookie('lang', _encode_if_unicode(context['lang']))
     return response
+
+@login_and_domain_required
+def get_commcare_version(request, app_id, app_version):
+    options = CommCareBuildConfig.fetch().get_menu(app_version)
+    return json_response(options)
 
 @login_and_domain_required
 def view_user_registration(request, domain, app_id):
@@ -1711,73 +1729,3 @@ def formdefs(request, domain, app_id):
     else:
         return json_response(formdefs)
 
-def _questions_for_form(request, form, langs):
-    # copied from get_form_view_context
-    xform_questions = []
-    xform = None
-    xform = form.wrapped_xform()
-    try:
-        xform = form.wrapped_xform()
-    except XFormError as e:
-        messages.error(request, "Error in form: %s" % e)
-    except Exception as e:
-        logging.exception(e)
-        messages.error(request, "Unexpected error in form: %s" % e)
-
-    if xform and xform.exists():
-        form.validate_form()
-        xform_questions = xform.get_questions(langs)
-        try:
-            form.validate_form()
-            xform_questions = xform.get_questions(langs)
-        except XMLSyntaxError as e:
-            messages.error(request, "Syntax Error: %s" % e)
-        except AppError as e:
-            messages.error(request, "Error in application: %s" % e)
-        except XFormValidationError as e:
-            message = unicode(e)
-            # Don't display the first two lines which say "Parsing form..." and 'Title: "{form_name}"'
-            messages.error(request, "Validation Error:\n")
-            for msg in message.split("\n")[2:]:
-                messages.error(request, "%s" % msg)
-        except XFormError as e:
-            messages.error(request, "Error in form: %s" % e)
-        # any other kind of error should fail hard, but for now there are too many for that to be practical
-        except Exception as e:
-            if settings.DEBUG:
-                raise
-            logging.exception(e)
-            messages.error(request, "Unexpected System Error: %s" % e)
-    return xform_questions
-
-def _find_name(names, langs):
-    name = None
-    for lang in langs:
-        if lang in names:
-            name = names[lang]
-            break
-    if name is None:
-        lang = names.keys()[0]
-        name = names[lang]
-    return name
-
-@login_and_domain_required
-def summary(request, domain, app_id):
-    app = Application.get(app_id)
-    context = get_apps_base_context(request, domain, app)
-    langs = context['langs']
-
-    modules = []
-
-    for module in app.get_modules():
-        forms = []
-        for form in module.get_forms():
-            forms.append({'name': _find_name(form.name, langs),
-                          'questions': _questions_for_form(request, form, langs)})
-
-        modules.append({'name': _find_name(module.name, langs), 'forms': forms})
-
-    context['modules'] = modules
-    context['summary'] = True
-
-    return render_to_response(request, "app_manager/summary.html", context)
