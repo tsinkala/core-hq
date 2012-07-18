@@ -2,7 +2,6 @@ from couchdbkit.ext.django.schema import *
 import util
 from django import forms
 from django.db import models
-from corehq.apps.users.models import AuthorizableMixin, WebUser
 from dimagi.utils.couch.undo import UndoableDocument, DeleteDocRecord
 
 
@@ -52,7 +51,9 @@ class Organization(Document):
         return self.members
 
 
-class Team(UndoableDocument, AuthorizableMixin):
+
+from corehq.apps.users.models import DomainAuthorizableMixin
+class Team(UndoableDocument, DomainAuthorizableMixin):
     name = StringProperty()
     organization = StringProperty()
     member_ids = StringListProperty()
@@ -92,6 +93,7 @@ class Team(UndoableDocument, AuthorizableMixin):
         return [user.user_id for user in self.get_members(is_active)]
 
     def get_members(self, is_active=True):
+        from corehq.apps.users.models import WebUser
         users = [WebUser.get_by_user_id(user_id) for user_id in self.member_ids]
         users = [user for user in users if not user.is_deleted()]
         if is_active is True:

@@ -241,7 +241,7 @@ class CouchUser(Document, UnicodeMixIn):
             if d.domain == domain:
                 # membership already exists
                 return
-        self.web_account.domain_memberships.append(DomainMembership(domain=domain,
+        self.web_account.domain_memberships.append(DomainMembership(subject=domain,
                                                         **kwargs))
 
     def is_domain_admin(self, domain=None):
@@ -262,7 +262,7 @@ class CouchUser(Document, UnicodeMixIn):
 
     @property
     def domain_names(self):
-        return [dm.domain for dm in self.web_account.domain_memberships]
+        return [dm.subject for dm in self.web_account.domain_memberships]
 
     def get_active_domains(self):
         domain_names = self.domain_names

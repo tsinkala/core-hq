@@ -25,8 +25,8 @@ class DomainMigrations(DocumentSchema):
     def apply(self, domain):
         if not self.has_migrated_permissions:
             logging.info("Applying permissions migration to domain %s" % domain.name)
-            from corehq.apps.users.models import UserRole, WebUser
-            UserRole.init_domain_with_presets(domain.name)
+            from corehq.apps.users.models import DomainUserRole, WebUser
+            DomainUserRole.init_with_presets(domain.name)
             for web_user in WebUser.by_domain(domain.name):
                 try:
                     web_user.save()

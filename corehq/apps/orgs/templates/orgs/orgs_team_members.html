@@ -125,7 +125,7 @@
             <!--<button class="btn btn-danger" type="submit">Remove All</button>-->
         <!--</form>--></h3><br/>
         <div class="well">
-            {% for domain, role in team_domains %}
+            {% for domain, role, roles in team_domains %}
             <form class="group-bubble" name="remove_domain" action="{% url remove_domain_from_team org.name team.get_id domain.name %}" method="post">
                 <input type="hidden" name="redirect_url" value="orgs_team_members" />
                 <div class="btn-toolbar">
@@ -135,10 +135,9 @@
                         <span class="caret"></span>
                     </a>
                     <ul class="dropdown-menu">
-                        <li><a href="{% url set_team_permission_for_domain org.name team.get_id domain.name 'admin' %}">Admin</a></li>
-                        <li><a href="{% url set_team_permission_for_domain org.name team.get_id domain.name 'edit-apps' %}">App Editor</a></li>
-                        <li><a href="{% url set_team_permission_for_domain org.name team.get_id domain.name 'field-implementer' %}">Field Implementer</a></li>
-                        <li><a href="{% url set_team_permission_for_domain org.name team.get_id domain.name 'read-only' %}">Read Only</a></li>
+                        {% for user_role, role_id in roles %}
+                        <li><a href="{% url set_team_permission_for_domain org.name team.get_id domain.name role_id %}">{{ user_role.name }}</a></li>
+                        {% endfor %}
                     </ul>
                 </div>
                 </div>

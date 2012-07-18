@@ -4,7 +4,7 @@ from django.views.decorators.http import require_POST
 from corehq.apps.domain.decorators import require_superuser
 from corehq.apps.registration.forms import DomainRegistrationForm
 from corehq.apps.orgs.forms import AddProjectForm, AddMemberForm, AddTeamForm, UpdateOrgInfo
-from corehq.apps.users.models import CouchUser, WebUser
+from corehq.apps.users.models import CouchUser, WebUser, AdminDomainUserRole, DomainUserRole
 from corehq.apps.users.views import require_can_edit_commcare_users
 from dimagi.utils.web import render_to_response, json_response, get_url_base
 from corehq.apps.orgs.models import Organization, Team, DeleteTeamRecord
@@ -171,7 +171,13 @@ def orgs_team_members(request, org, team_id, template="orgs/orgs_team_members.ht
     domain_names = team.get_domains()
     domains = list()
     for name in domain_names:
-        domains.append([Domain.get_by_name(name), team.role_label(domain=name)])
+        user_roles = [AdminDomainUserRole(subject=name)]
+        user_roles.extend(sorted(DomainUserRole.by_subject(name), key=lambda role: role.name if role.name else u'\uFFFF'))
+        roles = []
+        for user_role in user_roles:
+            roles.append([user_role, user_role.get_qualified_id().replace(':', '_')])
+        domains.append([Domain.get_by_name(name), team.role_label(domain=name), roles])
+
 
     all_org_domains = Domain.get_by_organization(org)
     non_domains = [domain for domain in all_org_domains if domain.name not in domain_names]
@@ -255,6 +261,7 @@ def remove_domain_from_team(request, org, team_id, domain):
 def set_team_permission_for_domain(request, org, team_id, domain, role_label):
     team = Team.get(team_id)
     if team:
+        role_label = role_label.replace('_', ':')
         team.set_role(domain, role_label)
         team.save()
     return HttpResponseRedirect(reverse('orgs_team_members', args=(org, team_id)))

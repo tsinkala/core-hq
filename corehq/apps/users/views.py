@@ -112,7 +112,7 @@ def users(request, domain):
 @require_can_edit_web_users
 def web_users(request, domain, template="users/web_users.html"):
     context = _users_context(request, domain)
-    user_roles = [AdminDomainUserRole(domain=domain)]
+    user_roles = [AdminDomainUserRole(subject=domain)]
     user_roles.extend(sorted(DomainUserRole.by_subject(domain), key=lambda role: role.name if role.name else u'\uFFFF'))
     context.update({
         'user_roles': user_roles,
