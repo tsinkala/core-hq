@@ -176,7 +176,7 @@ def orgs_team_members(request, org, team_id, template="orgs/orgs_team_members.ht
         roles = []
         for user_role in user_roles:
             roles.append([user_role, user_role.get_qualified_id().replace(':', '_')])
-        domains.append([Domain.get_by_name(name), team.role_label(domain=name), roles])
+        domains.append([Domain.get_by_name(name), team.role_label(item=name), roles])
 
 
     all_org_domains = Domain.get_by_organization(org)

@@ -438,7 +438,8 @@ class CouchUser(Document, UnicodeMixIn):
         ('edit-apps', 'App Editor'),
         ('read-only', 'Read Only')
     )
-    def role_label(self, domain=None):
+    def role_label(self, item=None):
+        domain = item
         if not domain:
             try:
                 domain = self.current_domain

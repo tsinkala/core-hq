@@ -654,14 +654,17 @@ class MembershipManager(object):
             raise Exception("role_qualified_id is %r" % role_qualified_id)
 
 
-    def role_label(self, instance, item=None):
+    def role_label(self, instance, item=None, collective=False):
         if not item:
             try:
                 item = getattr(instance, self.current_item)
             except (AttributeError, KeyError):
                 return None
         try:
-            return instance.get_role(item=item).name
+            if collective:
+                return instance.get_role(item=item).name
+            else:
+                return self.get_role(instance, item=item)
         except TypeError:
             return "Unknown User"
         except getattr(instance, self.item_membership_error_class):
@@ -802,12 +805,14 @@ class DomainAuthorizableMixin(DocumentSchema):
 #        except Exception:
 #            return domain_qs in self.get_domains() or self.is_global_admin()
 
-    def get_role(self, domain=None):
+    def get_role(self, item=None, domain=None):
         """
         Get the role object for this user
 
         """
-        return self.domain_manager.get_role(self, item=domain)
+        if not item:
+            item = domain
+        return self.domain_manager.get_role(self, item=item)
 #        print(self.get_domain_membership(domain))
 #        dm = self.get_domain_membership(domain)
 #        if domain is None:
@@ -838,9 +843,8 @@ class DomainAuthorizableMixin(DocumentSchema):
 #        else:
 #            raise Exception("role_qualified_id is %r" % role_qualified_id)
 
-    def role_label(self, domain=None):
-        return self.domain_manager.role_label(self, item=domain)
-
+    def role_label(self, item=None):
+        return self.domain_manager.role_label(self, item=item, collective=True)
 #        if not domain:
 #            try:
 #                domain = self.current_domain
@@ -886,6 +890,15 @@ class OrganizationAuthorizableMixin(DocumentSchema):
         item_membership_label='organization_membership_label', item_class='organization_class', item_membership_class='organization_membership_class', item_user_role='organization_user_role',
         current_item='current_organization', admin_role_class='organization_admin_role_class', item_membership_error_class='organization_membership_error_class',
         permission_presets='organization_permission_presets')
+
+    def get_role(self, item=None, organization=None):
+        """
+        Get the role object for this user
+
+        """
+        if not item:
+            item = organization
+        return self.organization_manager.get_role(self, item=item)
 
 
 class LowercaseStringProperty(StringProperty):
@@ -1585,11 +1598,10 @@ class CommCareUser(CouchUser, CommCareMobileContactMixin):
             else:
                 return False
 
-    def get_role(self, item=None):
+    def get_role(self, domain=None):
         """
         Get the role object for this user
         """
-        domain = item
         if domain is None:
             # default to current_domain for django templates
             domain = self.current_domain
@@ -1599,7 +1611,7 @@ class CommCareUser(CouchUser, CommCareMobileContactMixin):
         elif self.role_id is None:
             return None
         else:
-            return UserRole.get(self.role_id)
+            return UserRole.get(self.role_id) or DomainUserRole.get(self.role_id)
 
     def set_role(self, domain, role_qualified_id):
         """
@@ -1697,11 +1709,12 @@ class WebUser(CouchUser, DomainAuthorizableMixin):
 
 
 
-    def get_role(self, domain=None):
+    def get_role(self, item=None):
         """
         Get the role object for this user
 
         """
+        domain = item
         from corehq.apps.orgs.models import Team
         if domain is None:
             # default to current_domain for django templates
