@@ -174,8 +174,12 @@ public domain.
             domain.license = self.cleaned_data['license']
             domain.is_shared = self.cleaned_data['is_shared']
             domain.description = self.cleaned_data['description']
-            domain.deployment_date = self.cleaned_data['deployment_date']
-            domain.phone_model = self.cleaned_data['phone_model']
+            if 'deployment_date' in self.cleaned_data and self.cleaned_data['deployment_date'] != '':
+                year, month, day = map(int, self.cleaned_data['deployment_date'].split('-'))
+                domain.deployment_date = datetime.datetime(year, month, day)
+            else:
+                domain.deployment_date = None
+            domain.phone_model = self.cleaned_data.get('phone_model', '')
             domain.save()
             return True
         except Exception:
