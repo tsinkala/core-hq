@@ -327,7 +327,7 @@ class OrganizationUserRole(UserRole):
 
     @classmethod
     def role_choices(cls, organization):
-        return [(role.get_qualified_id(), role.name or '(No Name)') for role in [AdminOrganizationUserRole(subject=organization)] + list(cls.by_org(organization))]
+        return [(role.get_qualified_id(), role.name or '(No Name)') for role in [AdminOrganizationUserRole(subject=organization)] + list(cls.by_subject(organization))]
 
 
     @classmethod
@@ -381,6 +381,9 @@ class Membership(DocumentSchema):
     timezone = StringProperty(default=getattr(settings, "TIME_ZONE", "UTC"))
     override_global_tz = BooleanProperty(default=False)
     subject = StringProperty()
+
+    #legacy variable
+    domain = StringProperty()
 
     role_id = StringProperty()
 
@@ -513,6 +516,8 @@ class MembershipManager(object):
         item_membership = None
         try:
             for i in getattr(instance, self.item_memberships):
+                if not i.subject:
+                    i.subject = i.domain
                 if i.subject == item:
                     item_membership = i
                     if item not in getattr(instance, self.items):
@@ -528,6 +533,8 @@ class MembershipManager(object):
 
     def add_membership(self, instance, item, **kwargs):
         for i in getattr(instance, self.item_memberships):
+            if not i.subject:
+                i.subject = i.domain
             if i.subject == item:
                 if item not in getattr(instance, self.items):
                     raise CouchUser.Inconsistent(getattr(instance, self.item_label) + "'%s' is in " + getattr(instance, self.item_membership_label) +  "but not domains" % item)
@@ -554,11 +561,13 @@ class MembershipManager(object):
     # right now, only domain memberships can use the property create_record
     def delete_membership(self, instance, item, create_record=False):
         for i, item_membership in enumerate(getattr(instance, self.item_memberships)):
+            if not item_membership.subject:
+                item_membership.subject = item_membership.domain
             if item_membership.subject == item:
                 if create_record:
                     record = RemoveWebUserRecord(
                         domain=item,
-                        user_id=self.user_id,
+                        user_id=instance.user_id,
                         domain_membership=item_membership,
                         )
                 membership_list = getattr(instance, self.item_memberships)
@@ -602,14 +611,18 @@ class MembershipManager(object):
 
 
 
-    def has_permission(self, instance, item, permission, data=None):
+    def has_permission(self, instance, item, permission, data=None, collective=False):
         # is_admin is the same as having all the permissions set
         if instance.is_global_admin():
             return True
         elif self.is_admin(instance, item):
             return True
 
-        item_membership = self.get_membership(instance, item)
+        if collective:
+            item_membership = instance.get_membership(item)
+        else:
+            item_membership = self.get_membership(instance, item)
+
         if item_membership:
             return item_membership.has_permission(permission, data)
         else:
@@ -785,7 +798,7 @@ class DomainAuthorizableMixin(DocumentSchema):
 #            raise self.Inconsistent("domains and domain_memberships out of sync")
 
     def has_permission(self, domain, permission, data=None):
-        return self.domain_manager.has_permission(self, domain, permission, data=data)
+        return self.domain_manager.has_permission(self, domain, permission, data=data, collective=True)
 #        # is_admin is the same as having all the permissions set
 #        if self.is_global_admin():
 #            return True
@@ -1629,7 +1642,7 @@ class CommCareUser(CouchUser, CommCareMobileContactMixin):
                 raise Exception("unexpected role_qualified_id: %r" % role_qualified_id)
 
 
-class WebUser(CouchUser, DomainAuthorizableMixin):
+class WebUser(CouchUser, DomainAuthorizableMixin, OrganizationAuthorizableMixin):
 
     betahack = BooleanProperty(default=False)
     teams = StringListProperty()

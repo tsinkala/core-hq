@@ -12,6 +12,7 @@ from corehq.apps.orgs.views import orgs_landing
 from corehq.apps.registration.models import RegistrationRequest
 from corehq.apps.registration.forms import NewWebUserRegistrationForm, DomainRegistrationForm, OrganizationRegistrationForm
 from corehq.apps.registration.utils import *
+from corehq.apps.users.models import OrganizationUserRole
 from dimagi.utils.web import render_to_response, get_ip
 from corehq.apps.domain.decorators import require_superuser
 from corehq.apps.orgs.models import Organization
@@ -61,10 +62,21 @@ def register_org(request, template="registration/org_request.html"):
             else:
                 logo_filename = ''
 
+            username = request.user.username
+            user = WebUser.get_by_username(username)
+
             org = Organization(name=name, title=title, location=location, email=email, url=url, logo_filename=logo_filename)
+            org.add_member(user.get_id)
             org.save()
             if logo:
                 org.put_attachment(content=logo.read(), name=logo.name)
+
+            OrganizationUserRole.init_with_presets(name)
+
+            user.organization_manager.add_membership(user, item=name)
+            user.organization_manager.set_role(user, name, 'admin')
+            user.save()
+
 
             if referer_url:
                 return redirect(referer_url)

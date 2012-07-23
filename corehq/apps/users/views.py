@@ -149,8 +149,8 @@ def undo_remove_web_user(request, domain, record_id):
 @require_POST
 def post_user_role(request, domain):
     role_data = json.loads(request.raw_post_data)
-    role_data = dict([(p, role_data[p]) for p in set(UserRole.properties().keys() + ['_id', '_rev']) if p in role_data])
-    role = UserRole.wrap(role_data)
+    role_data = dict([(p, role_data[p]) for p in set(DomainUserRole.properties().keys() + ['_id', '_rev']) if p in role_data])
+    role = DomainUserRole.wrap(role_data)
     role.domain = domain
     if role.get_id:
         old_role = UserRole.get(role.get_id)
@@ -211,7 +211,7 @@ def accept_invitation(request, domain, invitation_id):
 
 @require_can_edit_web_users
 def invite_web_user(request, domain, template="users/invite_web_user.html"):
-    role_choices = UserRole.role_choices(domain)
+    role_choices = DomainUserRole.role_choices(domain)
     if request.method == "POST":
         form = AdminInvitesUserForm(request.POST,
             excluded_emails=[user.username for user in WebUser.by_domain(domain)],
@@ -482,9 +482,9 @@ def _handle_user_form(request, domain, couch_user=None):
         and request.couch_user.user_id != couch_user.user_id
     
     if couch_user.is_commcare_user():
-        role_choices = UserRole.commcareuser_role_choices(domain)
+        role_choices = DomainUserRole.commcareuser_role_choices(domain)
     else:
-        role_choices = UserRole.role_choices(domain)
+        role_choices = DomainUserRole.role_choices(domain)
     
     if request.method == "POST" and request.POST['form_type'] == "basic-info":
         form = UserForm(request.POST, role_choices=role_choices)

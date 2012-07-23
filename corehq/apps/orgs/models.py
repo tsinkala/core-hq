@@ -2,6 +2,7 @@ from couchdbkit.ext.django.schema import *
 import util
 from django import forms
 from django.db import models
+from django.conf import settings
 from dimagi.utils.couch.undo import UndoableDocument, DeleteDocRecord
 
 
@@ -19,6 +20,8 @@ class Organization(Document):
     is_active = BooleanProperty()
 
     members = StringListProperty()
+    default_timezone = StringProperty(default=getattr(settings, "TIME_ZONE", "UTC"))
+
 
     @classmethod
     def get_by_name(cls, name):

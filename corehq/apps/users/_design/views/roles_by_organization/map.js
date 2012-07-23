@@ -1,5 +1,5 @@
 function (doc) {
-    if (doc.doc_type === 'OrganizationUserRole'  || doc.doc_type === 'UserRole') {
+    if (doc.doc_type === 'OrganizationUserRole') {
         emit(doc.organization, null);
     }
 }

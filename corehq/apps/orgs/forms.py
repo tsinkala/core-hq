@@ -5,7 +5,7 @@ import re
 from corehq.apps.domain.utils import new_domain_re, website_re, new_org_title_re
 from corehq.apps.orgs.models import Organization, Team
 from corehq.apps.registration.forms import OrganizationRegistrationForm
-from corehq.apps.users.models import CouchUser
+from corehq.apps.users.models import CouchUser, OrganizationUserRole
 
 class AddProjectForm(forms.Form):
     domain_name = forms.CharField(label="Project name")
@@ -35,11 +35,15 @@ This project will be given a new name within this organization. You may leave it
         return data
 
 class AddMemberForm(forms.Form):
-    member_email = forms.CharField(label = "User Email", max_length=25)
-
     def __init__(self, org_name, *args, **kwargs):
         self.org_name = org_name
         super(AddMemberForm, self).__init__(*args, **kwargs)
+
+
+    member_email = forms.CharField(label = "User Email", max_length=25)
+    role_choices = OrganizationUserRole.role_choices('zfdbzfdb')
+    member_role = forms.ChoiceField(label = "Role", choices=role_choices)
+
 
     def clean_member_email(self):
         data = self.cleaned_data['member_email'].strip().lower()
@@ -54,6 +58,10 @@ class AddMemberForm(forms.Form):
             if id == exists.get_id:
                 raise forms.ValidationError('User is already part of this organization!')
 
+        return data
+
+    def clean_member_role(self):
+        data = self.cleaned_data['member_role']
         return data
 
     def clean(self):

@@ -71,11 +71,14 @@
 
         <a href="{% url orgs_landing org.name %}">{{ org.name }} ({{ org.title }})</a>
     </li>
+    {% block breadcrumb %}
+    {% endblock %}
 </ul>
         </div>
 {% endblock %}
 
 {% block centered-content %}
+        {% block org_header %}
     <section>
         <div class="row-fluid">
             <div class="span2">
@@ -87,51 +90,59 @@
             <p>Email: {% if org.email %}<a href="mailto:{{ org.email }}">{{ org.email }}</a>{% else %} None{% endif %}</p>
             <!-- possibly bad to add http to front of url.  How else to make link absolute? -->
             <p>URL: {% if org.url %}<a href="http://{{ org.url }}" target="_blank">{{ org.url }}</a>{% else %} None{% endif %}</p>
-            <p>Location: {{ org.location }}</p>
+            <p>Location: {% if org.location %}{{ org.location }}{% else %}None{% endif %}</p>
+            {% if membership.is_admin %}
             <a href="#update_info_modal" class="btn" data-toggle="modal">Update Info</a>
+            {% endif %}
         </div>
                 <div class="span7" style="padding-top:30px">
 
                     <div class="span2">
                         <h1>{{ domains|length }} <small>Projects</small></h1>
                     </div>
+                    {% if permission.view_teams %}
                     <div class="span2">
                         <h1>{{ teams|length }} <small>Teams</small></h1>
                     </div>
+                    {% endif %}
                     <div class="span2">
                     <h1>{{ org.members|length }} <small>Members</small></h1>
                     </div>
                 </div>
         </div>
-    </section>
-    <section>
         <div class="row-fluid">
             <hr/></div>
+    </section>
+        {% endblock %}
+        {% block org_content %}
+    <section>
         <div class="row-fluid">
             <div class="span4">
                 <ul class="nav nav-list">
-                    <li class="nav-header"><h2>Projects <a href="#add_project_modal" id="add_project_btn" class="btn btn-success" data-toggle="modal"><i class="icon-plus"></i></a> <a href="#create_project_modal" id="create_project_btn" class="btn btn-success" data-toggle="modal"><i class="icon-pencil"></i></a></h2></li>
+                    <li class="nav-header"><h2>Projects {% if permission.edit_projects %}<a href="#add_project_modal" id="add_project_btn" class="btn btn-success" data-toggle="modal"><i class="icon-plus"></i></a> <a href="#create_project_modal" id="create_project_btn" class="btn btn-success" data-toggle="modal"><i class="icon-pencil"></i></a>{% endif %}</h2></li>
                     {% for domain in domains %}
                     <li><a href="{% url domain_homepage domain %}"><h3>{{ domain.display_name }}</h3></a></li>
                     {% endfor %}
                 </ul>
             </div>
 
+            {% if permission.view_teams %}
             <div class="span3">
                 <div class="nav nav-list">
                     <li class="nav-header">
-                        <h2>Teams <a href="#add_team_modal" id="add_team_btn" class="btn btn-success" data-toggle="modal"><i class="icon-plus"></i></a></h2>
+                        <h2>Teams {% if permission.edit_teams %}<a href="#add_team_modal" id="add_team_btn" class="btn btn-success" data-toggle="modal"><i class="icon-plus"></i></a>{% endif %}</h2>
                     </li>
                     {% for team in teams %}
                     <li><a href="{% url orgs_team_members org.name team.get_id %}"><h3>{{ team.name }}</h3></a></li>
                     {% endfor %}
                 </div>
             </div>
-
+            {% endif %}
             <div class="span5">
                 <ul class="nav nav-list">
                     <li class="nav-header">
-                        <h2>Members <a href="#add_member_modal" id="add_member_btn" class="btn btn-success" data-toggle="modal"><i class="icon-plus"></i></a></h2>
+                        <h2>Members {% if permission.edit_members %}<a href="#add_member_modal" id="add_member_btn" class="btn btn-success" data-toggle="modal"><i class="icon-plus"></i></a>{% endif %}
+                        {% if membership.is_admin %}<a href="{% url orgs_members org.name %}" class="btn btn-success">Member Roles</a>{% endif %}</h2>
                     </li>
                     {% for member in members %}
                     <li><h3>{{ member.username }}{% if member.first_name and member.last_name %} <small>({{ member.full_name }})</small>{% endif %}</h3></li>
@@ -144,11 +155,12 @@
         <div class="row-fluid">
         </div>
     </section>
+        {% endblock %}
 
 {% endblock %}
 
 {% block modals %}{{ block.super }}
-    {% if user.is_superuser %}
+        {% if permission.edit_projects %}
         <div id="create_project_modal" class="modal hide fade">
             <div class="modal-header">
                 <a class="close" data-dismiss="modal">&times;</a>
@@ -203,7 +215,9 @@
                 </div>
             </form>
         </div>
+        {% endif %}
 
+        {% if membership.is_admin %}
         <div id="update_info_modal" class="modal hide fade">
             <div class="modal-header">
                 <a class="close" data-dismiss="modal">&times;</a>
@@ -222,7 +236,9 @@
                 </div>
             </form>
         </div>
+        {% endif %}
 
+        {% if permission.edit_projects %}
         <div id="add_project_modal" class="modal hide fade">
             <div class="modal-header">
                 <a class="close" data-dismiss="modal">&times;</a>
@@ -241,7 +257,9 @@
                 </div>
             </form>
         </div>
+        {% endif %}
 
+        {% if permission.edit_members %}
         <div id="add_member_modal" class="modal hide fade">
             <div class="modal-header">
                 <a class="close" data-dismiss="modal">&times;</a>
@@ -260,7 +278,9 @@
                 </div>
             </form>
         </div>
+        {% endif %}
 
+        {% if permission.edit_teams %}
         <div id="add_team_modal" class="modal hide fade">
             <div class="modal-header">
                 <a class="close" data-dismiss="modal">&times;</a>
@@ -279,6 +299,6 @@
                 </div>
             </form>
         </div>
+        {% endif %}
 
-    {% endif %}
 {% endblock %}
