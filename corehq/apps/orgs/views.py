@@ -2,6 +2,7 @@ from django.core.urlresolvers import reverse
 from django.http import HttpResponse, HttpResponseRedirect, Http404, HttpResponseForbidden
 from django.views.decorators.http import require_POST
 from corehq.apps.domain.decorators import require_superuser
+from corehq.apps.orgs.decorators import require_org_member
 from corehq.apps.registration.forms import DomainRegistrationForm
 from corehq.apps.orgs.forms import AddProjectForm, AddMemberForm, AddTeamForm, UpdateOrgInfo
 from corehq.apps.users.models import CouchUser, WebUser, AdminDomainUserRole, DomainUserRole, AdminOrganizationUserRole, OrganizationUserRole
@@ -19,6 +20,7 @@ def orgs_base(request, template="orgs/orgs_base.html"):
     vals = dict(orgs = organizations)
     return render_to_response(request, template, vals)
 
+@require_org_member
 def orgs_landing(request, org, template="orgs/orgs_landing.html", form=None, add_form=None, add_member_form=None, add_team_form=None, update_form=None):
     organization = Organization.get_by_name(org)
 
@@ -30,13 +32,14 @@ def orgs_landing(request, org, template="orgs/orgs_landing.html", form=None, add
 
     reg_form = form or DomainRegistrationForm(initial={'org': organization.name})
     add_form = add_form or AddProjectForm(org)
-    add_member_form = add_member_form or AddMemberForm(org)
+
+    role_choices = OrganizationUserRole.role_choices(org)
+    add_member_form = add_member_form or AddMemberForm(org, role_choices=role_choices)
     add_team_form = add_team_form or AddTeamForm(org)
 
     update_form = update_form or UpdateOrgInfo(initial={'org_title': organization.title, 'email': organization.email, 'url': organization.url, 'location': organization.location})
-
     current_teams = Team.get_by_org(org)
-    current_domains = Domain.get_by_organization(org)
+
     members = [WebUser.get_by_user_id(user_id) for user_id in organization.members]
     username = request.user.username
     user = WebUser.get_by_username(username)
@@ -45,14 +48,33 @@ def orgs_landing(request, org, template="orgs/orgs_landing.html", form=None, add
         permission = membership.permissions
     else:
         permission = OrganizationUserRole.get_default()
+
+    org_domains = Domain.get_by_organization(org)
+    if user.is_global_admin() or user.organization_manager.is_admin(user):
+        current_domains = org_domains
+    else:
+        user_domain_names = user.get_domains()
+        user_domains = list()
+        for name in user_domain_names:
+            user_domains.append(Domain.get_by_name(name))
+        current_domains = list()
+        for od in org_domains:
+            for ud in user_domains:
+                if (od and ud) and od.get_id == ud.get_id:
+                    current_domains.append(od)
+
     vals = dict( org=organization, domains=current_domains, reg_form=reg_form,
                  add_form=add_form, reg_form_empty=reg_form_empty, add_form_empty=add_form_empty, update_form=update_form, update_form_empty=update_form_empty, add_member_form=add_member_form, add_member_form_empty=add_member_form_empty, add_team_form=add_team_form, add_team_form_empty=add_team_form_empty, teams=current_teams, members=members, permission=permission, membership=membership)
     return render_to_response(request, template, vals)
 
+@require_org_member
 def orgs_members(request, org, template='orgs/orgs_members.html'):
     organization = Organization.get_by_name(org)
     couch_user = request.couch_user
     members = [WebUser.get_by_user_id(user_id) for user_id in organization.members]
+    roles = list()
+    for member in members:
+        roles.append([member, member.organization_manager.role_label(member, org)])
     user_roles = [AdminOrganizationUserRole(subject=org)]
     user_roles.extend(sorted(OrganizationUserRole.by_subject(org), key=lambda role: role.name if role.name else u'\uFFFF'))
     current_teams = Team.get_by_org(org)
@@ -64,13 +86,15 @@ def orgs_members(request, org, template='orgs/orgs_members.html'):
         permission = membership.permissions
     else:
         permission = OrganizationUserRole.get_default()
-    vals = dict(org=organization, members=members, couch_user=couch_user, user_roles=user_roles, default_role=OrganizationUserRole.get_default(), teams=current_teams, domains=current_domains, membership=membership, permission=permission)
+    vals = dict(org=organization, members=roles, couch_user=couch_user, user_roles=user_roles, default_role=OrganizationUserRole.get_default(), teams=current_teams, domains=current_domains, membership=membership, permission=permission)
     return render_to_response(request, template, vals)
 
+@require_org_member
 def get_data(request, org):
     organization = Organization.get_by_name(org)
     return json_response(organization)
 
+@require_org_member
 def orgs_new_project(request, org):
     from corehq.apps.registration.views import register_domain
     if request.method == 'POST':
@@ -78,6 +102,7 @@ def orgs_new_project(request, org):
     else:
         return orgs_landing(request, org, form=DomainRegistrationForm())
 
+@require_org_member
 def orgs_update_info(request, org):
     organization = Organization.get_by_name(org)
     if request.method == "POST":
@@ -107,7 +132,7 @@ def orgs_update_info(request, org):
     return HttpResponseRedirect(reverse('orgs_landing', args=[org]))
 
 
-
+@require_org_member
 def orgs_add_project(request, org):
     if request.method == "POST":
         form = AddProjectForm(org, request.POST)
@@ -123,12 +148,14 @@ def orgs_add_project(request, org):
             return orgs_landing(request, org, add_form=form)
     return HttpResponseRedirect(reverse('orgs_landing', args=[org]))
 
+@require_org_member
 def orgs_add_member(request, org):
     if request.method == "POST":
-        form = AddMemberForm(org, request.POST)
+        role_choices = OrganizationUserRole.role_choices(org)
+        form = AddMemberForm(org, request.POST, role_choices=role_choices)
         if form.is_valid():
             username = form.cleaned_data['member_email']
-            role_id = form.cleaned_data['member_role']
+            role_id = form.cleaned_data['role']
             user = CouchUser.get_by_username(username)
             user.organization_manager.add_membership(user, item=org)
             user.organization_manager.set_role(user, org, role_id)
@@ -142,6 +169,7 @@ def orgs_add_member(request, org):
             return orgs_landing(request, org, add_member_form=form)
     return HttpResponseRedirect(reverse('orgs_landing', args=[org]))
 
+@require_org_member
 def orgs_remove_member(request, org, member_id):
     organization = Organization.get_by_name(org)
     member = WebUser.get(member_id)
@@ -150,9 +178,20 @@ def orgs_remove_member(request, org, member_id):
     #remove the membership
     member.organization_manager.delete_membership(member, org)
     member.save()
+
+
+    org_teams = Team.get_by_org(org)
+    for team_name, team_id in member.teams:
+        team = Team.get(team_id)
+        for org_team in org_teams:
+            if team.get_id in org_team.get_id:
+                team.remove_member(member_id)
+
+
     organization.save()
     return HttpResponseRedirect(reverse('orgs_members', args=[org]))
 
+@require_org_member
 def orgs_add_team(request, org):
     if request.method == "POST":
         form = AddTeamForm(org, request.POST)
@@ -166,8 +205,9 @@ def orgs_add_team(request, org):
             return orgs_landing(request, org, add_team_form=form)
     return HttpResponseRedirect(reverse('orgs_landing', args=[org]))
 
+@require_org_member
 @require_superuser
-def orgs_logo(request, org, template="orgs/orgs_logo.html"):
+def orgs_logo(request, org):
     organization = Organization.get_by_name(org)
     if organization.logo_filename:
         image = organization.get_logo()
@@ -175,6 +215,7 @@ def orgs_logo(request, org, template="orgs/orgs_logo.html"):
         image = None
     return HttpResponse(image, content_type='image/gif')
 
+@require_org_member
 def orgs_teams(request, org, template="orgs/orgs_teams.html"):
     organization = Organization.get_by_name(org)
     teams = Team.get_by_org(org)
@@ -182,6 +223,7 @@ def orgs_teams(request, org, template="orgs/orgs_teams.html"):
     vals = dict(org=organization, teams=teams, domains=current_domains)
     return render_to_response(request, template, vals)
 
+@require_org_member
 def orgs_team_members(request, org, team_id, template="orgs/orgs_team_members.html"):
     #organization and teams
     organization = Organization.get_by_name(org)
@@ -220,6 +262,7 @@ def orgs_team_members(request, org, team_id, template="orgs/orgs_team_members.ht
     vals = dict(org=organization, team=team, teams=teams, members=members, nonmembers=non_members, domains=current_domains, team_domains=domains, team_nondomains=non_domains)
     return render_to_response(request, template, vals)
 
+@require_org_member
 def add_team(request, org):
     team_name = request.POST['team_name']
     team = Team.get_by_org_and_name(org, team_name)
@@ -230,6 +273,7 @@ def add_team(request, org):
     return HttpResponseRedirect(reverse("orgs_team_members", args=(org, team.get_id)))
 
 
+@require_org_member
 def join_team(request, org, team_id, couch_user_id):
     def add_user():
         team = Team.get(team_id)
@@ -239,6 +283,7 @@ def join_team(request, org, team_id, couch_user_id):
     if 'redirect_url' in request.POST:
         return HttpResponseRedirect(reverse(request.POST['redirect_url'], args=(org, team_id)))
 
+@require_org_member
 def leave_team(request, org, team_id, couch_user_id):
     def remove_user():
         team = Team.get(team_id)
@@ -249,6 +294,7 @@ def leave_team(request, org, team_id, couch_user_id):
         return HttpResponseRedirect(reverse(request.POST['redirect_url'], args=(org, team_id)))
 
 @require_POST
+@require_org_member
 def delete_team(request, org, team_id):
     team = Team.get(team_id)
     if team.organization == org:
@@ -260,11 +306,13 @@ def delete_team(request, org, team_id):
     else:
         return HttpResponseForbidden()
 
+@require_org_member
 def undo_delete_team(request, org, record_id):
     record = DeleteTeamRecord.get(record_id)
     record.undo()
     return HttpResponseRedirect(reverse('orgs_team_members', args=[org, record.doc_id]))
 
+@require_org_member
 def add_domain_to_team(request, org, team_id, domain):
     team = Team.get(team_id)
     if team:
@@ -273,6 +321,7 @@ def add_domain_to_team(request, org, team_id, domain):
     if 'redirect_url' in request.POST:
         return HttpResponseRedirect(reverse(request.POST['redirect_url'], args=(org, team_id)))
 
+@require_org_member
 def remove_domain_from_team(request, org, team_id, domain):
     team = Team.get(team_id)
     if team:
@@ -281,6 +330,7 @@ def remove_domain_from_team(request, org, team_id, domain):
     if 'redirect_url' in request.POST:
         return HttpResponseRedirect(reverse(request.POST['redirect_url'], args=(org, team_id)))
 
+@require_org_member
 def set_team_permission_for_domain(request, org, team_id, domain, role_label):
     team = Team.get(team_id)
     if team:
@@ -289,6 +339,7 @@ def set_team_permission_for_domain(request, org, team_id, domain, role_label):
         team.save()
     return HttpResponseRedirect(reverse('orgs_team_members', args=(org, team_id)))
 
+@require_org_member
 def add_all_to_team(request, org, team_id):
     team = Team.get(team_id)
     if team:
@@ -299,6 +350,7 @@ def add_all_to_team(request, org, team_id):
     if 'redirect_url' in request.POST:
         return HttpResponseRedirect(reverse(request.POST['redirect_url'], args=(org, team_id)))
 
+@require_org_member
 def remove_all_from_team(request, org, team_id):
     team = Team.get(team_id)
     if team:

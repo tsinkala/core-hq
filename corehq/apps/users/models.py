@@ -255,7 +255,7 @@ DOMAIN_PERMISSIONS_PRESETS = {
 ORGANIZATION_PERMISSIONS_PRESETS = {
     'member': {'name': 'Member', 'permissions': OrganizationPermissions(edit_members=True)},
     'project-manager': {'name': 'Project Manager', 'permissions': OrganizationPermissions(edit_members=True, edit_projects=True)},
-    'team-manaer': {'name': 'Team Manager', 'permissions': OrganizationPermissions(edit_members=True, edit_teams=True)},
+    'team-manaer': {'name': 'Team Manager', 'permissions': OrganizationPermissions(edit_members=True, edit_teams=True, view_teams=True)},
     'nonmember': {'name': 'NonMember', 'permissions': OrganizationPermissions()},
 }
 
@@ -333,7 +333,7 @@ class OrganizationUserRole(UserRole):
     @classmethod
     def init_with_presets(cls, subject):
         cls.get_or_create_with_permissions(subject, OrganizationPermissions(edit_members=True), 'Member')
-        cls.get_or_create_with_permissions(subject, OrganizationPermissions(edit_members=True, edit_projects=True), 'Project Manager')
+        cls.get_or_create_with_permissions(subject, OrganizationPermissions(edit_members=True, edit_projects=True, view_teams=True), 'Project Manager')
         cls.get_or_create_with_permissions(subject, OrganizationPermissions(edit_members=True, edit_teams=True), 'Team Manager')
 
     @classmethod
@@ -544,22 +544,30 @@ class MembershipManager(object):
             item_obj = getattr(instance, self.item_class)(is_active=True, name=item, date_created=datetime.utcnow())
             item_obj.save()
 
-        if kwargs.get('timezone'):
-            item_membership = getattr(instance, self.item_membership_class)(subject=item, **kwargs)
+        if kwargs.get('subject'):
+            if kwargs.get('timezone'):
+                item_membership = getattr(instance, self.item_membership_class)(**kwargs)
+            else:
+                item_membership = getattr(instance, self.item_membership_class)(
+                                                timezone=item_obj.default_timezone,
+                                                **kwargs)
         else:
-            item_membership = getattr(instance, self.item_membership_class)(subject=item,
-                                            timezone=item_obj.default_timezone,
-                                            **kwargs)
+            if kwargs.get('timezone'):
+                item_membership = getattr(instance, self.item_membership_class)(subject = item)
+            else:
+                item_membership = getattr(instance, self.item_membership_class)(subject = item,
+                                                timezone=item_obj.default_timezone)
 
         membership_list = getattr(instance, self.item_memberships)
         membership_list.append(item_membership)
         item_list = getattr(instance, self.items)
-        item_list.append(item)
+        item_list.append(item_membership.subject or item_membership.domain or item)
         setattr(instance, self.item_memberships, membership_list)
         setattr(instance, self.items, item_list)
 
     # right now, only domain memberships can use the property create_record
     def delete_membership(self, instance, item, create_record=False):
+        record = ''
         for i, item_membership in enumerate(getattr(instance, self.item_memberships)):
             if not item_membership.subject:
                 item_membership.subject = item_membership.domain
@@ -581,9 +589,11 @@ class MembershipManager(object):
                 setattr(instance, self.items, item_list)
                 break
         if create_record:
-            record.save()
-            return record
-
+            if record:
+                record.save()
+                return record
+            else:
+                return 'error'
     def is_admin(self, instance, item=None):
         if not item:
             # hack for template
@@ -677,7 +687,7 @@ class MembershipManager(object):
             if collective:
                 return instance.get_role(item=item).name
             else:
-                return self.get_role(instance, item=item)
+                return self.get_role(instance, item=item).name
         except TypeError:
             return "Unknown User"
         except getattr(instance, self.item_membership_error_class):

@@ -5,6 +5,7 @@ import re
 from corehq.apps.domain.utils import new_domain_re, website_re, new_org_title_re
 from corehq.apps.orgs.models import Organization, Team
 from corehq.apps.registration.forms import OrganizationRegistrationForm
+from corehq.apps.users.forms import RoleForm
 from corehq.apps.users.models import CouchUser, OrganizationUserRole
 
 class AddProjectForm(forms.Form):
@@ -34,15 +35,15 @@ This project will be given a new name within this organization. You may leave it
             raise forms.ValidationError('This project does not exist.')
         return data
 
-class AddMemberForm(forms.Form):
+class AddMemberForm(RoleForm):
     def __init__(self, org_name, *args, **kwargs):
         self.org_name = org_name
         super(AddMemberForm, self).__init__(*args, **kwargs)
 
 
     member_email = forms.CharField(label = "User Email", max_length=25)
-    role_choices = OrganizationUserRole.role_choices('zfdbzfdb')
-    member_role = forms.ChoiceField(label = "Role", choices=role_choices)
+    role = forms.ChoiceField(choices=())
+
 
 
     def clean_member_email(self):

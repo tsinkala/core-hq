@@ -126,7 +126,7 @@
                 </ul>
             </div>
 
-            {% if permission.view_teams %}
+            {% if permission.edit_teams %}
             <div class="span3">
                 <div class="nav nav-list">
                     <li class="nav-header">
@@ -141,7 +141,7 @@
             <div class="span5">
                 <ul class="nav nav-list">
                     <li class="nav-header">
-                        <h2>Members {% if permission.edit_members %}<a href="#add_member_modal" id="add_member_btn" class="btn btn-success" data-toggle="modal"><i class="icon-plus"></i></a>{% endif %}
+                        <h2>Members {% if membership.is_admin %}<a href="#add_member_modal" id="add_member_btn" class="btn btn-success" data-toggle="modal"><i class="icon-plus"></i></a>{% endif %}
                         {% if membership.is_admin %}<a href="{% url orgs_members org.name %}" class="btn btn-success">Member Roles</a>{% endif %}</h2>
                     </li>
                     {% for member in members %}

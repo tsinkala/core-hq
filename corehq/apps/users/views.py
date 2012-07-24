@@ -126,11 +126,14 @@ def web_users(request, domain, template="users/web_users.html"):
 def remove_web_user(request, domain, couch_user_id):
     user = WebUser.get_by_user_id(couch_user_id, domain)
     record = user.delete_domain_membership(domain, create_record=True)
-    user.save()
-    messages.success(request, 'You have successfully removed {username} from your domain. <a href="{url}" class="post-link">Undo</a>'.format(
-            username=user.username,
-            url=reverse('undo_remove_web_user', args=[domain, record.get_id])
-        ), extra_tags="html")
+    if record == 'error':
+        messages.error(request, 'Unable to remove membership because user has team access')
+    else:
+        user.save()
+        messages.success(request, 'You have successfully removed {username} from your domain. <a href="{url}" class="post-link">Undo</a>'.format(
+                username=user.username,
+                url=reverse('undo_remove_web_user', args=[domain, record.get_id])
+            ), extra_tags="html")
     return HttpResponseRedirect(reverse('web_users', args=[domain]))
 
 @require_can_edit_web_users
@@ -153,8 +156,8 @@ def post_user_role(request, domain):
     role = DomainUserRole.wrap(role_data)
     role.domain = domain
     if role.get_id:
-        old_role = UserRole.get(role.get_id)
-        assert(old_role.doc_type == UserRole.__name__)
+        old_role = UserRole.get(role.get_id) or DomainUserRole.get(role.get_id)
+        assert(old_role.doc_type == UserRole.__name__ or old_role.doc_type == DomainUserRole.__name__)
     role.save()
     return json_response(role)
 
