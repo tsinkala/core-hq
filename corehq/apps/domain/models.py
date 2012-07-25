@@ -6,6 +6,7 @@ from django.db import models
 from couchdbkit.ext.django.schema import Document, StringProperty,\
     BooleanProperty, DateTimeProperty, IntegerProperty, DocumentSchema, SchemaProperty, DictProperty
 from corehq.apps.appstore.models import Review
+from corehq.apps.orgs.models import Organization
 from dimagi.utils.timezones import fields as tz_fields
 from dimagi.utils.couch.database import get_db
 from itertools import chain
@@ -109,6 +110,10 @@ class Domain(Document):
         if self.get_id:
             self.apply_migrations()
         return self
+
+    @property
+    def get_organization(self):
+        return Organization.get_by_name(self.organization)
 
     @staticmethod
     def active_for_user(user, is_active=True):

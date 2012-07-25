@@ -67,7 +67,7 @@
                     <div id="remove_member_modal{{ user.get_id }}" class="modal hide fade">
                         <div class="modal-header">
                             <a class="close" data-dismiss="modal">&times;</a>
-                            <h3>Are you sure you want to delete {{ user.name }} from {{ org.name }}?</h3>
+                            <h3>Are you sure you want to delete {% if user.name %}{{ user.name }}{% else %}{{ user.html_username|safe }}{% endif %} from {{ org.title }}?</h3>
                         </div>
                         <div class="modal-footer">
                             <form action="{% url orgs_remove_member org.name user.get_id %}" method="post">

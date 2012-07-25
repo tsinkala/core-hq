@@ -206,7 +206,6 @@ def orgs_add_team(request, org):
     return HttpResponseRedirect(reverse('orgs_landing', args=[org]))
 
 @require_org_member
-@require_superuser
 def orgs_logo(request, org):
     organization = Organization.get_by_name(org)
     if organization.logo_filename:
