@@ -187,57 +187,15 @@ class Domain(Document):
                                     endkey=[self.name, {}]).all()
 
     def full_applications(self):
-        WRAPPERS = {'Application': Application, 'RemoteApp': RemoteApp}
-        def wrap_application(a):
-            return WRAPPERS[a['doc']['doc_type']].wrap(a['doc'])
-
+        from corehq.apps.app_manager.models import Application, RemoteApp
+        def wrap_by_doc_type(r):
+            return {'Application': Application, 'RemoteApp': RemoteApp}[r['doc']['doc_type']].wrap(r['doc'])
         return get_db().view('app_manager/applications',
-            startkey=[self.name],
-            endkey=[self.name, {}],
-            include_docs=True,
-            wrapper=wrap_application).all()
+                                    include_docs=True,
+                                    startkey=[self.name],
+                                    endkey=[self.name, {}],
+                                    wrapper=wrap_by_doc_type).all()
 
-    @cached_property
-    def versions(self):
-        apps = self.applications()
-        return list(set(a.application_version for a in apps))
-
-    @cached_property
-    def has_case_management(self):
-        for app in self.full_applications():
-            if app.doc_type == 'Application':
-                if app.has_case_management():
-                    return True
-        return False
-
-    @cached_property
-    def has_media(self):
-        for app in self.full_applications():
-            if app.doc_type == 'Application' and app.has_media():
-                return True
-        return False
-
-    def all_users(self):
-        from corehq.apps.users.models import CouchUser
-        return CouchUser.by_domain(self.name)
-
-    def has_shared_media(self):
-        return False
-
-    def recent_submissions(self):
-        res = get_db().view('reports/all_submissions',
-            startkey=[self.name, {}],
-            endkey=[self.name],
-            descending=True,
-            reduce=False,
-            include_docs=False,
-            limit=1).all()
-        if len(res) > 0: # if there have been any submissions in the past 30 days
-            return datetime.now() <= datetime.strptime(res[0]['value']['time'], "%Y-%m-%dT%H:%M:%SZ") + timedelta(days=30)
-        else:
-            return False
-
-    @cached_property
     def languages(self):
         apps = self.applications()
         return set(chain.from_iterable([a.langs for a in apps]))
@@ -287,6 +245,17 @@ class Domain(Document):
                             date_created=datetime.utcnow())
             new_domain.save()
             return new_domain
+
+    def password_format(self):
+        """
+        If a single application is alphanumeric, return alphanumeric; otherwise, return numeric
+        """
+        for app in self.full_applications():
+            if hasattr(app, 'profile'):
+                format = app.profile.get('properties', {}).get('password_format', 'n')
+                if format == 'a':
+                    return 'a'
+        return 'n'
 
     @classmethod
     def get_all(cls):
