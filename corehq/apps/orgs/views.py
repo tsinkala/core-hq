@@ -235,6 +235,7 @@ def orgs_team_members(request, org, team_id, template="orgs/orgs_team_members.ht
         raise Http404("Group %s does not exist" % team_id)
 
     #inspect the members of the team
+
     member_ids = team.get_member_ids()
     members = WebUser.view("_all_docs", keys=member_ids, include_docs=True).all()
     members.sort(key=lambda user: user.username)
@@ -298,6 +299,12 @@ def delete_team(request, org, team_id):
     team = Team.get(team_id)
     if team.organization == org:
         record = team.soft_delete()
+        for member_id in team.member_ids:
+            team_member = WebUser.get(member_id)
+            for team_name, team_id in team_member.teams:
+                if team_id == team.get_id:
+                    team_member.teams.remove([team_name, team_id])
+            team_member.save()
         messages.success(request, 'You have deleted a team. <a href="{url}" class="post-link">Undo</a>'.format(
             url=reverse('undo_delete_team', args=[org, record.get_id])
         ), extra_tags="html")
@@ -309,7 +316,12 @@ def delete_team(request, org, team_id):
 def undo_delete_team(request, org, record_id):
     record = DeleteTeamRecord.get(record_id)
     record.undo()
-    return HttpResponseRedirect(reverse('orgs_team_members', args=[org, record.doc_id]))
+    team = Team.get(record.doc_id)
+    for member_id in team.get_member_ids():
+        team_member = WebUser.get(member_id)
+        team_member.teams.append([team.name, team.get_id])
+        team_member.save()
+    return HttpResponseRedirect(reverse('orgs_team_members', args=[org, record.doc_id,]))
 
 @require_org_member
 def add_domain_to_team(request, org, team_id, domain):
