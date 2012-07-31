@@ -510,10 +510,10 @@ class MembershipManager(object):
                 if i.subject == item:
                     item_membership = i
                     if item not in getattr(instance, self.items):
-                        raise CouchUser.Inconsistent(getattr(instance, self.item_label) + "'%s' is in " % item + getattr(instance, self.item_membership_label) +  "but not domains")
+                        raise CouchUser.Inconsistent(self.item_label + "'%s' is in " % item + self.item_membership_label +  "but not domains")
 
             if not item_membership and item in getattr(instance, self.items):
-                raise CouchUser.Inconsistent(getattr(instance, self.item_label) + " '%s' is in " % item + getattr(instance, self.item_label) + " but not in " + getattr(instance, self.item_membership_label))
+                raise CouchUser.Inconsistent(self.item_label + " '%s' is in " % item + self.item_label + " but not in " + self.item_membership_label)
         except CouchUser.Inconsistent as e:
             logging.warning(e)
             consistent_list =  [i.subject or i.domain for i in getattr(instance, self.item_memberships)]
@@ -526,25 +526,25 @@ class MembershipManager(object):
                 i.subject = i.domain
             if i.subject == item:
                 if item not in getattr(instance, self.items):
-                    raise CouchUser.Inconsistent(getattr(instance, self.item_label) + "'%s' is in " + getattr(instance, self.item_membership_label) +  "but not domains" % item)
+                    raise CouchUser.Inconsistent(self.item_label + "'%s' is in " + self.item_membership_label +  "but not domains" % item)
                 return
-        item_obj = getattr(instance, self.item_class).get_by_name(item)
+        item_obj = self.item_class.get_by_name(item)
         if not item_obj:
-            item_obj = getattr(instance, self.item_class)(is_active=True, name=item, date_created=datetime.utcnow())
+            item_obj = self.item_class(is_active=True, name=item, date_created=datetime.utcnow())
             item_obj.save()
 
         if kwargs.get('subject'):
             if kwargs.get('timezone'):
-                item_membership = getattr(instance, self.item_membership_class)(**kwargs)
+                item_membership = self.item_membership_class(**kwargs)
             else:
-                item_membership = getattr(instance, self.item_membership_class)(
+                item_membership = self.item_membership_class(
                                                 timezone=item_obj.default_timezone,
                                                 **kwargs)
         else:
             if kwargs.get('timezone'):
-                item_membership = getattr(instance, self.item_membership_class)(subject = item)
+                item_membership = self.item_membership_class(subject = item)
             else:
-                item_membership = getattr(instance, self.item_membership_class)(subject = item,
+                item_membership = self.item_membership_class(subject = item,
                                                 timezone=item_obj.default_timezone)
 
         membership_list = getattr(instance, self.item_memberships)
@@ -643,11 +643,11 @@ class MembershipManager(object):
             item = getattr(instance, self.current_item)
 
         if instance.is_global_admin():
-            return getattr(instance, self.admin_role_class)(subject=item)
+            return self.admin_role_class(subject=item)
         if self.is_member_of(instance, item):
             return self.get_membership(instance, item).role
         else:
-            raise getattr(instance, self.item_membership_error_class)()
+            raise self.item_membership_error_class()
 
     def set_role(self, instance, item, role_qualified_id):
         """
@@ -659,9 +659,9 @@ class MembershipManager(object):
             item_membership.is_admin = True
         elif role_qualified_id.startswith('user-role:'):
             item_membership.role_id = role_qualified_id[len('user-role:'):]
-        elif role_qualified_id in getattr(instance, self.permission_presets):
-            preset = getattr(instance, self.permission_presets)[role_qualified_id]
-            item_membership.role_id = getattr(instance, self.item_user_role).get_or_create_with_permissions(item, preset['permissions'], preset['name']).get_id
+        elif role_qualified_id in self.permission_presets:
+            preset = self.permission_presets[role_qualified_id]
+            item_membership.role_id = self.item_user_role.get_or_create_with_permissions(item, preset['permissions'], preset['name']).get_id
         else:
             raise Exception("role_qualified_id is %r" % role_qualified_id)
 
@@ -679,7 +679,7 @@ class MembershipManager(object):
                 return self.get_role(instance, item=item).name
         except TypeError:
             return "Unknown User"
-        except getattr(instance, self.item_membership_error_class):
+        except self.item_membership_error_class:
             return "Unauthorized User"
         except Exception:
             return None
@@ -688,22 +688,11 @@ class MembershipManager(object):
 class DomainAuthorizableMixin(DocumentSchema):
     domains = StringListProperty()
     domain_memberships = SchemaListProperty(DomainMembership)
-    domain_label = 'domain'
-    domain_membership_label = 'domain membership'
-    domain_class = Domain
-    domain_membership_class = DomainMembership
-    domain_user_role = DomainUserRole
-    domain_admin_role_class = AdminDomainUserRole
-    domain_membership_error_class = DomainMembershipError
-
-    @property
-    def domain_permission_presets(self):
-        return DOMAIN_PERMISSIONS_PRESETS
 
     domain_manager = MembershipManager(items='domains', item_memberships='domain_memberships', item_label='domain',
         item_membership_label='domain membership', item_class=Domain, item_membership_class=DomainMembership, item_user_role=DomainUserRole,
         current_item='current_domain', admin_role_class=AdminDomainUserRole, item_membership_error_class=DomainMembershipError,
-        permission_presets='domain_permission_presets')
+        permission_presets=DOMAIN_PERMISSIONS_PRESETS)
 
     def is_global_admin(self):
         # subclasses to override if they want this functionality
@@ -753,22 +742,11 @@ from corehq.apps.orgs.models import Organization
 class OrganizationAuthorizableMixin(DocumentSchema):
     organizations = StringListProperty()
     organization_memberships = SchemaListProperty(OrganizationMembership)
-    organization_label = 'organization'
-    organization_membership_label = 'organization membership'
-    organization_class = Organization
-    organization_membership_class = OrganizationMembership
-    organization_user_role = OrganizationUserRole
-    organization_admin_role_class = AdminOrganizationUserRole
-    organization_membership_error_class = OrganizationMembershipError
 
-    @property
-    def organization_permission_presets(self):
-        return ORGANIZATION_PERMISSIONS_PRESETS
-
-    organization_manager = MembershipManager(items='organizations', item_memberships='organization_memberships', item_label='organization_label',
-        item_membership_label='organization_membership_label', item_class='organization_class', item_membership_class='organization_membership_class', item_user_role='organization_user_role',
-        current_item='current_organization', admin_role_class='organization_admin_role_class', item_membership_error_class='organization_membership_error_class',
-        permission_presets='organization_permission_presets')
+    organization_manager = MembershipManager(items='organizations', item_memberships='organization_memberships', item_label='organization',
+        item_membership_label='organization membership', item_class=Organization, item_membership_class=OrganizationMembership, item_user_role=OrganizationUserRole,
+        current_item='current_organization', admin_role_class=AdminOrganizationUserRole, item_membership_error_class=OrganizationMembershipError,
+        permission_presets=ORGANIZATION_PERMISSIONS_PRESETS)
 
     def get_role(self, item=None, organization=None):
         """
