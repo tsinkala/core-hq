@@ -227,6 +227,8 @@ class UserRole(Document):
             role = cls(domain=subject, permissions=permissions, name=get_name())
         elif issubclass(cls, OrganizationUserRole):
             role = cls(organization=subject, permissions=permissions, name=get_name())
+        else:
+            raise Exception("cls must be either DomainUserRole or OrganizationUserRole")
         role.save()
         return role
 
@@ -262,15 +264,6 @@ ORGANIZATION_PERMISSIONS_PRESETS = {
 class DomainUserRole(UserRole):
     domain = StringProperty()
     permissions = SchemaProperty(DomainPermissions)
-
-    #this is in UserRole because all legacy roles will be for domains
-#    @classmethod
-#    def by_subject(cls, domain):
-#        return cls.view('users/roles_by_domain',
-#            key=domain,
-#            include_docs=True,
-#            reduce=False,
-#        )
 
     @classmethod
     def get_default(cls, domain=None):
@@ -1461,6 +1454,11 @@ class CommCareUser(CouchUser, CommCareMobileContactMixin):
     def get_case_sharing_groups(self):
         from corehq.apps.groups.models import Group
         return [group for group in Group.by_user(self) if group.case_sharing]
+
+    @classmethod
+    def cannot_share(cls, domain):
+        return [user for user in cls.by_domain(domain) if len(user.get_case_sharing_groups()) != 1]
+
     def get_group_ids(self):
         from corehq.apps.groups.models import Group
         return Group.by_user(self, wrap=False)
@@ -1521,9 +1519,7 @@ class CommCareUser(CouchUser, CommCareMobileContactMixin):
             else:
                 raise Exception("unexpected role_qualified_id: %r" % role_qualified_id)
 
-
 class WebUser(CouchUser, DomainAuthorizableMixin, OrganizationAuthorizableMixin):
-
     betahack = BooleanProperty(default=False)
     teams = StringListProperty()
 

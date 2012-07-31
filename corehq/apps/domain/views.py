@@ -10,7 +10,7 @@ from django.shortcuts import redirect
 
 from corehq.apps.domain.decorators import REDIRECT_FIELD_NAME, login_required_late_eval_of_LOGIN_URL, login_and_domain_required, domain_admin_required, require_previewer
 from corehq.apps.domain.forms import DomainSelectionForm, DomainGlobalSettingsForm,\
-    DomainMetadataForm, SnapshotSettingsForm
+    DomainMetadataForm, SnapshotSettingsForm, SnapshotApplicationForm
 from corehq.apps.domain.models import Domain, LICENSES
 from corehq.apps.domain.utils import get_domained_url, normalize_domain_name
 
@@ -227,9 +227,6 @@ def project_settings(request, domain, template="domain/admin/project_settings.ht
                 'project_type': domain.project_type,
                 'customer_type': domain.customer_type,
                 'is_test': json.dumps(domain.is_test),
-                'description': domain.description,
-                'is_shared': domain.is_shared,
-                'license': domain.license
             })
         else:
             form = DomainGlobalSettingsForm(initial={
@@ -263,35 +260,66 @@ def snapshot_settings(request, domain):
 @domain_admin_required
 def create_snapshot(request, domain):
     domain = Domain.get_by_name(domain)
-    form = SnapshotSettingsForm()
-    latest_applications = [app.get_latest_saved() or app for app in domain.applications()]
+    #latest_applications = [app.get_latest_saved() or app for app in domain.applications()]
     if request.method == 'GET':
+        form = SnapshotSettingsForm(initial={
+                'default_timezone': domain.default_timezone,
+                'case_sharing': json.dumps(domain.case_sharing),
+                'city': domain.city,
+                'country': domain.country,
+                'region': domain.region,
+                'project_type': domain.project_type,
+                'share_multimedia': True,
+            })
+        app_forms = []
+        for app in domain.applications():
+            app = app.get_latest_saved() or app
+            app_forms.append((app, SnapshotApplicationForm(initial={'publish': True}, prefix=app.id)))
         return render_to_response(request, 'domain/create_snapshot.html',
             {'domain': domain.name,
              'form': form,
-             'latest_applications': latest_applications,
+             #'latest_applications': latest_applications,
+             'app_forms': app_forms,
              'autocomplete_fields': ('project_type', 'phone_model', 'user_type', 'city', 'country', 'region')})
     elif request.method == 'POST':
         form = SnapshotSettingsForm(request.POST)
+        app_forms = []
+        publishing_apps = False
+        for app in domain.applications():
+            app = app.get_latest_saved() or app
+            app_forms.append((app, SnapshotApplicationForm(request.POST, prefix=app.id)))
+            publishing_apps = publishing_apps or request.POST.get("%s-publish" % app.id, False)
+        if not publishing_apps:
+            messages.error(request, "Cannot publish a project without applications to CommCare Exchange")
+            return render_to_response(request, 'domain/create_snapshot.html',
+                {'domain': domain.name,
+                 'form': form,
+                 'app_forms': app_forms,
+                 'autocomplete_fields': ('project_type', 'phone_model', 'user_type', 'city', 'country', 'region')})
+        
         if not form.is_valid():
             return render_to_response(request, 'domain/create_snapshot.html',
                     {'domain': domain.name,
-                     'form': form})
+                     'form': form,
+                     #'latest_applications': latest_applications,
+                     'app_forms': app_forms,
+                     'autocomplete_fields': ('project_type', 'phone_model', 'user_type', 'city', 'country', 'region')})
+
+        if request.POST.get('share_multimedia', False):
+            media = domain.all_media()
+            for m_file in media:
+                if domain.name not in m_file.shared_by:
+                    m_file.shared_by.append(domain.name)
+                    m_file.license[domain.name] = domain.license
+                    m_file.save()
         new_domain = domain.save_snapshot()
         if request.POST['license'] in LICENSES.keys():
             new_domain.license = request.POST['license']
         new_domain.description = request.POST['description']
-        new_domain.attribution_notes = request.POST['attribution_notes']
         new_domain.project_type = request.POST['project_type']
         new_domain.region = request.POST['region']
         new_domain.city = request.POST['city']
         new_domain.country = request.POST['country']
-        date_picked = request.POST['deployment_date'].split('-')
-        if len(date_picked) > 1:
-            if int(date_picked[0]) > 2009 and date_picked[1] and date_picked[2]:
-                new_domain.deployment_date = datetime.datetime(int(date_picked[0]), int(date_picked[1]), int(date_picked[2]))
-        new_domain.phone_model = request.POST['phone_model']
-        new_domain.user_type = request.POST['user_type']
         new_domain.title = request.POST['title']
         new_domain.author = request.POST['author']
         for snapshot in domain.snapshots():
@@ -304,18 +332,29 @@ def create_snapshot(request, domain):
 
         for application in new_domain.full_applications():
             original_id = application.original_doc
-            application.description = request.POST["%s_description" % original_id]
-            if application.description != '':
-                application.save()
+            if request.POST.get("%s-publish" % original_id, False):
+                application.description = request.POST["%s-description" % original_id]
+                date_picked = request.POST["%s-deployment_date" % original_id].split('-')
+                if len(date_picked) > 1:
+                    if int(date_picked[0]) > 2009 and date_picked[1] and date_picked[2]:
+                        application.deployment_date = datetime.datetime(int(date_picked[0]), int(date_picked[1]), int(date_picked[2]))
+                application.phone_model = request.POST["%s-phone_model" % original_id]
+                application.attribution_notes = request.POST["%s-attribution_notes" % original_id]
+                application.user_type = request.POST["%s-user_type" % original_id]
+                if application.description != '':
+                    application.save()
+            else:
+                application.delete()
 
         if new_domain is None:
             return render_to_response(request, 'domain/snapshot_settings.html',
                     {'domain': domain.name,
                      'form': form,
-                     'latest_applications': latest_applications,
+                     #'latest_applications': latest_applications,
+                     'app_forms': app_forms,
                      'error_message': 'Snapshot creation failed; please try again'})
 
-        messages.success(request, "Created snapshot. The snapshot will be posted to the project store pending approval by admins.")
+        messages.success(request, "Created snapshot. The snapshot will be posted to CommCare Exchange pending approval by admins.")
         return redirect('domain_snapshot_settings', domain.name)
 
 @require_superuser # remove for production
@@ -334,7 +373,7 @@ def set_published_snapshot(request, domain, snapshot_name=''):
                 messages.error(request, "Invalid snapshot")
             published_snapshot.published = True
             published_snapshot.save()
-    return redirect('domain_copy_snapshot', domain.name)
+    return redirect('domain_snapshot_settings', domain.name)
 
 @require_superuser # remove for production
 @login_and_domain_required
