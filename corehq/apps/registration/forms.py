@@ -68,8 +68,6 @@ class OrganizationRegistrationForm(forms.Form):
 
     def clean_org_title(self):
         data = self.cleaned_data['org_title'].strip()
-        if not re.match("^%s$" % new_org_title_re, data) and not data == '':
-            raise forms.ValidationError('Only letters and numbers allowed. Single spaces may be used to separate words.')
         return data
 
     def clean_email(self):

@@ -707,9 +707,9 @@ class DomainAuthorizableMixin(DocumentSchema):
     def domain_permission_presets(self):
         return DOMAIN_PERMISSIONS_PRESETS
 
-    domain_manager = MembershipManager(items='domains', item_memberships='domain_memberships', item_label='domain_label',
-        item_membership_label='domain_membership_label', item_class='domain_class', item_membership_class='domain_membership_class', item_user_role='domain_user_role',
-        current_item='current_domain', admin_role_class='domain_admin_role_class', item_membership_error_class='domain_membership_error_class',
+    domain_manager = MembershipManager(items='domains', item_memberships='domain_memberships', item_label='domain',
+        item_membership_label='domain membership', item_class=Domain, item_membership_class=DomainMembership, item_user_role=DomainUserRole,
+        current_item='current_domain', admin_role_class=AdminDomainUserRole, item_membership_error_class=DomainMembershipError,
         permission_presets='domain_permission_presets')
 
     def is_global_admin(self):
