@@ -149,7 +149,10 @@
 
 {% endblock %}
 
+
+
 {% block modals %}{{ block.super }}
+        {% block other_modals %}
         {% if permission.edit_projects %}
         <div id="create_project_modal" class="modal hide fade">
             <div class="modal-header">
@@ -249,26 +252,6 @@
         </div>
         {% endif %}
 
-        {% if permission.edit_members %}
-        <div id="add_member_modal" class="modal hide fade">
-            <div class="modal-header">
-                <a class="close" data-dismiss="modal">&times;</a>
-                <h3>Add a new member to {{ org.title }}</h3>
-            </div>
-            <form class="form-horizontal" method="post" action="{% url orgs_add_member org.name %}">
-                <div class="modal-body">
-                    <fieldset>
-                        {% bootstrap_form_errors add_member_form %}
-                        {% bootstrap_fieldset add_member_form %}
-                    </fieldset>
-                </div>
-                <div class="modal-footer">
-                    <a href="#" data-dismiss="modal" class="btn">Cancel</a>
-                    <button type="submit" class="btn btn-primary">Add Member</button>
-                </div>
-            </form>
-        </div>
-        {% endif %}
 
         {% if permission.edit_teams %}
         <div id="add_team_modal" class="modal hide fade">
@@ -290,5 +273,32 @@
             </form>
         </div>
         {% endif %}
+{% endblock %}
+
+{% if permission.edit_members %}
+<div id="add_member_modal" class="modal hide fade">
+    <div class="modal-header">
+        <a class="close" data-dismiss="modal">&times;</a>
+        <h3>Add a new member to {{ org.title }}</h3>
+    </div>
+    {% block add_member_action %}
+    <form class="form-horizontal" method="post" action="{% url orgs_add_member org.name 'none' %}">
+        {% endblock %}
+        <div class="modal-body">
+            <fieldset>
+                {% bootstrap_form_errors add_member_form %}
+                {% bootstrap_fieldset add_member_form %}
+            </fieldset>
+            {% block add_member_redirect_url %}
+            {% endblock %}
+        </div>
+        <div class="modal-footer">
+            <a href="#" data-dismiss="modal" class="btn">Cancel</a>
+            <button type="submit" class="btn btn-primary">Add Member</button>
+        </div>
+    </form>
+</div>
+{% endif %}
 
 {% endblock %}
+

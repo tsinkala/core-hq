@@ -112,6 +112,7 @@
                 <button type="submit" class="btn btn-success"><i class="icon icon-white icon-plus"></i> {{ nonmember.raw_username }}</button>
             </form>
             {% endfor %}
+            {% if membership.is_admin %}<a href="#add_member_modal" id="add_member_to_org_and_team_btn" class="btn btn-success" data-toggle="modal" style="vertical-align: top; margin-top: 4px;"><i class="icon-plus icon-white"></i> other</a>{% endif %}
         </div>
     </div>
 </div>
@@ -164,3 +165,10 @@
 </div>
 {% endblock %}
 
+{% block add_member_redirect_url %}
+<input type="hidden" name="redirect_url" value="orgs_team_members" />
+{% endblock %}
+
+{% block add_member_action %}
+<form class="form-horizontal" method="post" action="{% url orgs_add_member org.name team.get_id %}">
+{% endblock %}
