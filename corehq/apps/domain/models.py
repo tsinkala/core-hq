@@ -83,8 +83,9 @@ class Domain(Document):
     description = StringProperty()
     is_shared = BooleanProperty(default=False)
 
-    # project store/domain copying stuff
+    # exchange/domain copying stuff
     original_doc = StringProperty()
+    original_doc_display_name = StringProperty()
     is_snapshot = BooleanProperty(default=False)
     is_approved = BooleanProperty(default=False)
     snapshot_time = DateTimeProperty()
@@ -101,8 +102,8 @@ class Domain(Document):
 
     cached_properties = DictProperty()
 
-    # to be eliminated from projects and related documents when they are copied for the project store
-    _dirty_fields = ('admin_password', 'admin_password_charset')
+    # to be eliminated from projects and related documents when they are copied for the exchange
+    _dirty_fields = ('admin_password', 'admin_password_charset', 'city', 'country', 'region', 'customer_type')
 
     @classmethod
     def wrap(cls, data):
@@ -188,14 +189,57 @@ class Domain(Document):
 
     def full_applications(self):
         from corehq.apps.app_manager.models import Application, RemoteApp
-        def wrap_by_doc_type(r):
-            return {'Application': Application, 'RemoteApp': RemoteApp}[r['doc']['doc_type']].wrap(r['doc'])
-        return get_db().view('app_manager/applications',
-                                    include_docs=True,
-                                    startkey=[self.name],
-                                    endkey=[self.name, {}],
-                                    wrapper=wrap_by_doc_type).all()
+        WRAPPERS = {'Application': Application, 'RemoteApp': RemoteApp}
+        def wrap_application(a):
+            return WRAPPERS[a['doc']['doc_type']].wrap(a['doc'])
 
+        return get_db().view('app_manager/applications',
+            startkey=[self.name],
+            endkey=[self.name, {}],
+            include_docs=True,
+            wrapper=wrap_application).all()
+
+    @cached_property
+    def versions(self):
+        apps = self.applications()
+        return list(set(a.application_version for a in apps))
+
+    @cached_property
+    def has_case_management(self):
+        for app in self.full_applications():
+            if app.doc_type == 'Application':
+                if app.has_case_management():
+                    return True
+        return False
+
+    @cached_property
+    def has_media(self):
+        for app in self.full_applications():
+            if app.doc_type == 'Application' and app.has_media():
+                return True
+        return False
+
+    def all_users(self):
+        from corehq.apps.users.models import CouchUser
+        return CouchUser.by_domain(self.name)
+
+    def has_shared_media(self):
+        return False
+
+    def recent_submissions(self):
+        res = get_db().view('reports/all_submissions',
+            startkey=[self.name, {}],
+            endkey=[self.name],
+            descending=True,
+            reduce=False,
+            include_docs=False,
+            limit=1).all()
+        if len(res) > 0: # if there have been any submissions in the past 30 days
+            return datetime.now() <= datetime.strptime(res[0]['value']['time'], "%Y-%m-%dT%H:%M:%SZ") + timedelta(days=30)
+        else:
+            return False
+
+    @cached_property
     def languages(self):
         apps = self.applications()
         return set(chain.from_iterable([a.langs for a in apps]))
@@ -267,8 +311,7 @@ class Domain(Document):
         return self.case_sharing or reduce(lambda x, y: x or y, [getattr(app, 'case_sharing', False) for app in self.applications()], False)
 
     def save_copy(self, new_domain_name=None, user=None):
-        from corehq.apps.app_manager.models import RemoteApp, Application
-        from corehq.apps.users.models import UserRole
+        from corehq.apps.app_manager.models import get_app
         if new_domain_name is not None and Domain.get_by_name(new_domain_name):
             return None
         db = get_db()
@@ -281,6 +324,7 @@ class Domain(Document):
         new_domain.is_snapshot = False
         new_domain.snapshot_time = None
         new_domain.original_doc = self.name
+        new_domain.original_doc_display_name = self.display_name()
         new_domain.organization = None # TODO: use current user's organization (?)
 
         for field in self._dirty_fields:
@@ -306,28 +350,31 @@ class Domain(Document):
         return new_domain
 
     def copy_component(self, doc_type, id, new_domain_name, user=None):
+        from corehq.apps.app_manager.models import import_app
+        from corehq.apps.users.models import UserRole
         str_to_cls = {
             'UserRole': UserRole,
-            'Application': Application,
-            'RemoteApp': RemoteApp,
             }
         db = get_db()
-        doc_type = doc_type
-        cls = str_to_cls[doc_type]
-        new_id = db.copy_doc(id)['id']
+        if doc_type in ('Application', 'RemoteApp'):
+            new_doc = import_app(id, new_domain_name)
+        else:
+            cls = str_to_cls[doc_type]
+            new_id = db.copy_doc(id)['id']
 
-        new_doc = cls.get(new_id)
-        for field in self._dirty_fields:
-            if hasattr(new_doc, field):
-                delattr(new_doc, field)
-
-        if hasattr(cls, '_meta_fields'):
-            for field in cls._meta_fields:
-                if not field.startswith('_') and hasattr(new_doc, field):
+            new_doc = cls.get(new_id)
+            for field in self._dirty_fields:
+                if hasattr(new_doc, field):
                     delattr(new_doc, field)
 
+            if hasattr(cls, '_meta_fields'):
+                for field in cls._meta_fields:
+                    if not field.startswith('_') and hasattr(new_doc, field):
+                        delattr(new_doc, field)
+
+            new_doc.domain = new_domain_name
+
         new_doc.original_doc = id
-        new_doc.domain = new_domain_name
 
         if self.is_snapshot and doc_type == 'Application':
             new_doc.clean_mapping()
@@ -532,4 +579,3 @@ class OldDomain(models.Model):
         
     def __unicode__(self):
         return self.name
-

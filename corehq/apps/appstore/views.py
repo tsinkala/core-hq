@@ -21,6 +21,9 @@ from django.shortcuts import redirect
 
 PER_PAGE = 9
 
+def redirect(request, path):
+    return HttpResponseRedirect('/exchange' + path)
+
 @require_superuser # remove for production
 def appstore(request, template="appstore/appstore_base.html", sort_by=None):
     page = int(request.GET.get('page', 1))
@@ -47,7 +50,7 @@ def project_info(request, domain, template="appstore/project_info.html"):
     if not dom or not dom.is_snapshot or not dom.published or (not dom.is_approved and not request.couch_user.is_domain_admin(domain)):
         raise Http404()
 
-    if request.method == "POST":
+    if request.method == "POST" and dom.original_doc not in request.couch_user.get_domains():
         versioned = True
         form = AddReviewForm(request.POST)
         if form.is_valid():
@@ -150,6 +153,7 @@ def filter_choices(request, filter_by, template="appstore/filter_choices.html"):
 
     return render_to_response(request, template, {'choices': choices, 'filter_by': filter_by})
 
+@require_superuser # remove for production
 def filter_snapshots(request, filter_by, filter, template="appstore/appstore_base.html", sort_by=None):
     if filter_by not in ('category', 'license', 'region', 'organization', 'author'):
         raise Http404("That page doesn't exist")
@@ -203,7 +207,6 @@ def report_dispatcher(request, slug, return_json=False,
                                custom, async, async_filters)
 
 @require_superuser # remove for production
-@require_superuser
 def approve_app(request, domain):
     domain = Domain.get_by_name(domain)
     if request.GET.get('approve') == 'true':
