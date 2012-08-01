@@ -55,7 +55,7 @@
         <div class="container">
 <ul class="breadcrumb">
     <li>
-        <strong>Organizations</strong> <span class="divider">&gt;</span>
+        <a href="{% url orgs_base %}"><strong>Organizations </strong></a><span class="divider">&gt;</span>
     </li>
     <li>
 
@@ -81,9 +81,11 @@
             <!-- possibly bad to add http to front of url.  How else to make link absolute? -->
             <p>URL: {% if org.url %}<a href="http://{{ org.url }}" target="_blank">{{ org.url }}</a>{% else %} None{% endif %}</p>
             <p>Location: {% if org.location %}{{ org.location }}{% else %}None{% endif %}</p>
+            {% block info_button %}
             {% if membership.is_admin %}
             <a href="#update_info_modal" class="btn" data-toggle="modal">Update Info</a>
             {% endif %}
+            {% endblock %}
         </div>
                 <div class="span7" style="padding-top:30px">
 
@@ -111,7 +113,22 @@
                 <ul class="nav nav-list">
                     <li class="nav-header"><h2>Projects {% if permission.edit_projects %}<a href="#add_project_modal" id="add_project_btn" class="btn btn-success" data-toggle="modal" style="vertical-align: top; margin-top: 4px;"><i class="icon-plus icon-white"></i></a> <a href="#create_project_modal" id="create_project_btn" class="btn btn-success" data-toggle="modal" style="vertical-align: top; margin-top: 4px;"><i class="icon-pencil icon-white"></i></a>{% endif %}</h2></li>
                     {% for domain in domains %}
-                    <li><a href="{% url domain_homepage domain %}"><h3>{{ domain.display_name }}</h3></a></li>
+                    <li><a href="{% url domain_homepage domain %}"><h3>{{ domain.display_name }}{% if permission.edit_projects %}<a href="#remove_project_modal{{ domain.get_id }}" data-toggle="modal" style="float:right;"><i class="icon-remove"></i></a>{% endif %}</h3></a></li>
+                    <div id="remove_project_modal{{ domain.get_id }}" class="modal hide fade">
+                        <div class="modal-header">
+                            <a class="close" data-dismiss="modal">&times;</a>
+                            <h3>Are you sure you want to remove {% if domain.display_name %}{{ domain.display_name }}{% else %}{{ domain.original_doc_display_name }}{% endif %} from {{ org.title }}?</h3>
+                            <br/>
+                            <h4>This will remove {% if domain.display_name %}{{ domain.display_name }}{% else %}{{ domain.original_doc_display_name }}{% endif %} from any teams it is on.</h4>
+                        </div>
+                        <div class="modal-footer">
+                            <form action="{% url orgs_remove_domain org.name domain.name %}" method="post">
+                                <button type="submit" class="btn btn-danger"><i class="icon icon-white icon-remove"></i> Remove</button>
+                                <a href="#" data-dismiss="modal" class="btn">Cancel</a>
+                            </form>
+                        </div>
+                        </form>
+                    </div>
                     {% endfor %}
                 </ul>
             </div>

@@ -29,7 +29,8 @@
 {% block breadcrumb %}
         <li><span class="divider">&gt;</span> <a href="#">Members</a></li>
 {% endblock %}
-
+{% block info_button %}
+{% endblock %}
 {% block org_content %}
 <div class="row-fluid">
         <h2>Members of Organization "{{ org.title }}"</h2>
@@ -50,7 +51,22 @@
                     {{ user.html_username|safe }}
 
                 </td>
-                <td>{% if role %}{{ role }}{% else %}<h6>(No Name)</h6>{% endif %}</td>
+                <td>
+                    {% ifnotequal request.user.username user.username %}
+                    <div class="btn-group" style="vertical-align: middle;">
+                    <a href="#" class="btn btn-inverse dropdown-toggle" data-toggle="dropdown"><i class="icon icon-white icon-lock"></i> {% if role %}{{ role }}{% else %}None{% endif %}
+                        <span class="caret"></span>
+                    </a>
+                    <ul class="dropdown-menu">
+                        {% for org_role, role_id in org_roles %}
+                        <li><a href="{% url orgs_change_role org.name user.get_id role_id %}">{{ org_role.name }}</a></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                    {% else %}
+                    {% if role %}{{ role }}{% else %}None{% endif %}
+                    {% endifnotequal %}
+                </td>
                 <td>{{ user.first_name }} {{ user.last_name }}</td>
                 <td>
                     {% if user.phone_numbers %}

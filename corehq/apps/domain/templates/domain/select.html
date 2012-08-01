@@ -15,7 +15,7 @@
     <div class="span4">
         <aside class="well">
             <h3>Have a new idea?</h3>
-            <a class="btn btn-primary" href="{% url registration_domain %}">Create a Blank Project</a>
+            <a class="btn btn-primary" href="{% domain/selecturl registration_domain %}">Create a Blank Project</a>
             {% if request.user.is_superuser %}
             <div>or</div>
             <a class="btn btn-primary" href="{% url appstore %}">Copy from CommCare Exchange</a>

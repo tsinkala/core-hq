@@ -8,8 +8,8 @@ from corehq.apps.registration.forms import OrganizationRegistrationForm
 from corehq.apps.users.forms import RoleForm
 from corehq.apps.users.models import CouchUser, OrganizationUserRole
 
-class AddProjectForm(forms.Form):
-    domain_name = forms.CharField(label="Project name")
+class AddProjectForm(RoleForm):
+    role = forms.ChoiceField(label="Project name", choices=())
     domain_slug = forms.CharField(label="New project name", help_text="""
 This project will be given a new name within this organization. You may leave it the same or choose a new name.
 """)
@@ -29,11 +29,17 @@ This project will be given a new name within this organization. You may leave it
             raise forms.ValidationError('A project with that name already exists.')
         return data
 
-    def clean_domain_name(self):
-        data = self.cleaned_data['domain_name'].strip().lower()
-        if not Domain.get_by_name(data):
-            raise forms.ValidationError('This project does not exist.')
-        return data
+#    def clean_domain_name(self):
+#        data = self.cleaned_data['domain_name'].strip().lower()
+#        if not Domain.get_by_name(data):
+#            raise forms.ValidationError('This project does not exist.')
+#        return data
+
+    def clean(self):
+        for field in self.cleaned_data:
+            if isinstance(self.cleaned_data[field], basestring):
+                self.cleaned_data[field] = self.cleaned_data[field].strip()
+        return self.cleaned_data
 
 class AddMemberForm(RoleForm):
     def __init__(self, org_name, *args, **kwargs):
@@ -61,9 +67,9 @@ class AddMemberForm(RoleForm):
 
         return data
 
-    def clean_member_role(self):
-        data = self.cleaned_data['member_role']
-        return data
+#    def clean_member_role(self):
+#        data = self.cleaned_data['member_role']
+#        return data
 
     def clean(self):
         for field in self.cleaned_data:

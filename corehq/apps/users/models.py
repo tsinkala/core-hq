@@ -606,7 +606,7 @@ class MembershipManager(object):
         if set(items) == set(getattr(instance, self.items)):
             return items
         else:
-            raise CouchUser.Inconsistent("domains and domain_memberships out of sync")
+            raise CouchUser.Inconsistent(self.item_label + " and " + self.item_membership_label + " out of sync")
 
 
 
