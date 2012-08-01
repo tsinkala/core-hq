@@ -1619,7 +1619,13 @@ class WebUser(CouchUser, DomainAuthorizableMixin, OrganizationAuthorizableMixin)
                 total_permission |= permission
 
             #set up a user role
-        return DomainUserRole(domain=domain, permissions=total_permission, name=', '.join([(domain_membership.role.name or 'None') + membership_source for domain_membership, membership_source in domain_memberships]))
+        role_name = list()
+        for domain_membership, membership_source in domain_memberships:
+            if domain_membership.role:
+                role_name.append([domain_membership.role.name, membership_source])
+            else:
+                role_name.append(['None', membership_source])
+        return DomainUserRole(domain=domain, permissions=total_permission, name=', '.join([domain_membership_name + membership_source for domain_membership_name, membership_source in role_name]))
 
 class FakeUser(WebUser):
     """

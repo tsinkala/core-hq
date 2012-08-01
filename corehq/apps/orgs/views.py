@@ -149,7 +149,7 @@ def orgs_add_project(request, org):
     return HttpResponseRedirect(reverse('orgs_landing', args=[org]))
 
 @require_org_member
-def orgs_add_member(request, org):
+def orgs_add_member(request, org, team_id=None):
     if request.method == "POST":
         role_choices = OrganizationUserRole.role_choices(org)
         form = AddMemberForm(org, request.POST, role_choices=role_choices)
@@ -166,7 +166,11 @@ def orgs_add_member(request, org):
             messages.success(request, "Member Added!")
         else:
             messages.error(request, "Unable to add member")
+            if 'redirect_url' in request.POST:
+                return orgs_team_members(request, org, team_id)
             return orgs_landing(request, org, add_member_form=form)
+    if 'redirect_url' in request.POST:
+        return join_team(request, org, team_id, user_id)
     return HttpResponseRedirect(reverse('orgs_landing', args=[org]))
 
 @require_org_member
@@ -223,13 +227,17 @@ def orgs_teams(request, org, template="orgs/orgs_teams.html"):
     return render_to_response(request, template, vals)
 
 @require_org_member
-def orgs_team_members(request, org, team_id, template="orgs/orgs_team_members.html"):
+def orgs_team_members(request, org, team_id, add_member_form=None, template="orgs/orgs_team_members.html"):
     #organization and teams
     organization = Organization.get_by_name(org)
     teams = Team.get_by_org(org)
     current_domains = Domain.get_by_organization(org)
 
-    #check that the team exists
+    add_member_form_empty = not add_member_form
+    role_choices = OrganizationUserRole.role_choices(org)
+    add_member_form = add_member_form or AddMemberForm(org, role_choices=role_choices)
+
+#check that the team exists
     team = Team.get(team_id)
     if team is None:
         raise Http404("Group %s does not exist" % team_id)
@@ -259,7 +267,16 @@ def orgs_team_members(request, org, team_id, template="orgs/orgs_team_members.ht
     all_org_members = WebUser.view("_all_docs", keys=all_org_member_ids, include_docs=True).all()
     non_members = [member for member in all_org_members if member.user_id not in member_ids]
 
-    vals = dict(org=organization, team=team, teams=teams, members=members, nonmembers=non_members, domains=current_domains, team_domains=domains, team_nondomains=non_domains)
+
+    username = request.user.username
+    user = WebUser.get_by_username(username)
+    membership = user.organization_manager.get_membership(user, item=org)
+    if membership:
+        permission = membership.permissions
+    else:
+        permission = OrganizationUserRole.get_default()
+
+    vals = dict(org=organization, team=team, teams=teams, members=members, nonmembers=non_members, domains=current_domains, team_domains=domains, team_nondomains=non_domains, permission=permission, membership=membership, add_member_form=add_member_form, add_member_form_empty=add_member_form_empty)
     return render_to_response(request, template, vals)
 
 @require_org_member
