@@ -301,7 +301,7 @@
 <div id="add_member_modal" class="modal hide fade">
     <div class="modal-header">
         <a class="close" data-dismiss="modal">&times;</a>
-        <h3>Add a new member to {{ org.title }}</h3>
+        <h3>Add a new member to {{ org.title }} {% block team_label %}{% endblock %}</h3>
     </div>
     {% block add_member_action %}
     <form class="form-horizontal" method="post" action="{% url orgs_add_member org.name 'none' %}">

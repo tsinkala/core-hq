@@ -172,3 +172,7 @@
 {% block add_member_action %}
 <form class="form-horizontal" method="post" action="{% url orgs_add_member org.name team.get_id %}">
 {% endblock %}
+
+{% block team_label %}
+and team {{ team.name }}
+{% endblock %}

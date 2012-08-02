@@ -1193,10 +1193,6 @@ class CommCareUser(CouchUser, CommCareMobileContactMixin):
     def filter_flag(self):
         return HQUserType.REGISTERED
 
-    def is_global_admin(self):
-        # override this function to pass global admin rights off to django
-        return False
-
     @property
     def username_in_report(self):
         if (self.first_name == '' and self.last_name == ''):
