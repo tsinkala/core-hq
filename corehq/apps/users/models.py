@@ -1025,6 +1025,8 @@ class CouchUser(Document, DjangoUserMixin, UnicodeMixIn):
         else:
             return None
 
+    def is_global_admin(self):
+        return False
 
     def is_member_of(self, domain_qs):
         """
@@ -1035,7 +1037,6 @@ class CouchUser(Document, DjangoUserMixin, UnicodeMixIn):
             return domain_qs.name in self.get_domains() or self.is_global_admin()
         except Exception:
             return domain_qs in self.get_domains() or self.is_global_admin()
-
 
     @classmethod
     def get_by_user_id(cls, userID, domain=None):
@@ -1630,6 +1631,7 @@ class WebUser(CouchUser, DomainAuthorizableMixin, OrganizationAuthorizableMixin)
             else:
                 role_name.append(['None', membership_source])
         return DomainUserRole(domain=domain, permissions=total_permission, name=', '.join([domain_membership_name + membership_source for domain_membership_name, membership_source in role_name]))
+
 
 class FakeUser(WebUser):
     """

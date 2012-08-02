@@ -26,9 +26,17 @@ class CommCareMultimedia(Document):
     # add something about context from the form(s) its in
 
     owners = StringListProperty(default=[])
-    license = DictProperty(default={}) # dict of strings
+    licenses = DictProperty(default={}) # dict of strings
     shared_by = StringListProperty(default=[])
     tags = DictProperty(default={}) # dict of string lists
+
+    @classmethod
+    def wrap(cls, data):
+        if data.get('tags') == []:
+            data['tags'] = {}
+        if not data.get('owners'):
+            data['owners'] = data.get('valid_domains', [])
+        return super(CommCareMultimedia, cls).wrap(data)
 
     def attach_data(self, data, upload_path=None, username=None, attachment_id=None,
                     media_meta=None, replace_attachment=False):
@@ -58,6 +66,15 @@ class CommCareMultimedia(Document):
         self.save()
 
     def add_domain(self, domain, owner=None, **kwargs):
+        print owner
+        print self.owners
+        print self.valid_domains
+
+        if len(self.owners) == 0:
+            # this is intended to simulate migration--if it happens that a media file somehow gets no more owners
+            # (which should be impossible) it will transfer ownership to all copiers... not necessarily a bad thing,
+            # just something to be aware of
+            self.owners = self.valid_domains
 
         if owner and domain not in self.owners:
             self.owners.append(domain)
@@ -71,8 +88,8 @@ class CommCareMultimedia(Document):
             elif not shared and shared != '' and domain in self.shared_by:
                 self.shared_by.remove(domain)
 
-            if kwargs.get('license', ''):
-                self.license[domain] = kwargs['license']
+            if kwargs.get('licenses', ''):
+                self.licenses[domain] = kwargs['license']
             if kwargs.get('tags', ''):
                 self.tags[domain] = kwargs['tags']
 
