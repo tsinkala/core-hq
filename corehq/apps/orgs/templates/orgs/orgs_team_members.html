@@ -32,19 +32,10 @@
 </script>
 {% endblock %}
 
-{% block page-title %}
-<ul class="breadcrumb">
-    <li>
-        <strong>Organizations</strong> <span class="divider">&gt;</span>
-    </li>
-    <li>
-
-        <a href="{% url orgs_landing org.name %}">{{ org.name }} ({{ org.title }})</a>
-    </li>
+{% block breadcrumb %}
     <li>
         <span class="divider">&gt;</span><a href="#">Editing Team "{{ team.name }}"</a>
     </li>
-</ul>
 {% endblock %}
 
 {% block team-header %}
@@ -76,7 +67,7 @@
 {% endblock %}
 
 {% block team-view %}
-<div class="container"><h2>Manage Team Members</h2><br/>
+<h2>Manage Team Members</h2><br/>
 <div class="row-fluid">
     <div class="span6" id="members">
         <h3>Organization Members in Team
@@ -117,8 +108,7 @@
     </div>
 </div>
     <hr/>
-</div>
-<div class="container"><h2>Manage Team Projects</h2><br/>
+<h2>Manage Team Projects</h2><br/>
 <div class="row-fluid">
     <div class="span6" id="domains">
         <h3>Team Projects
@@ -161,7 +151,6 @@
             {% endfor %}
         </div>
     </div>
-</div>
 </div>
 {% endblock %}
 

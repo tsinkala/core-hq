@@ -15,7 +15,7 @@ from dimagi.utils.couch.resource_conflict import repeat
 
 
 
-def orgs_base(request, template="orgs/orgs_base.html"):
+def orgs_base(request, template="orgs/orgs_list.html"):
     username = request.user.username
     user = WebUser.get_by_username(username)
     org_names = user.organization_manager.get_items(user)
@@ -71,11 +71,26 @@ def orgs_landing(request, org, template="orgs/orgs_landing.html", form=None, add
                     current_domains.append(od)
 
 
-    domain_list = get_available_domains(request, org)
-    add_form = add_form or AddProjectForm(org,  role_choices=domain_list)
+    domain_list_total = get_available_domains(request, org)
+    domain_list_admin = list()
+
+    if permission.edit_projects:
+        for domain in domain_list_total:
+            if user.is_domain_admin(domain[0]):
+                domain_list_admin.append(domain)
+    add_form = add_form or AddProjectForm(org,  role_choices=domain_list_admin)
+
+    org_names = user.organization_manager.get_items(user)
+    orgs = list()
+    for name in org_names:
+        orgs.append(Organization.get_by_name(name))
+
 
     vals = dict( org=organization, domains=current_domains, reg_form=reg_form,
-                 add_form=add_form, reg_form_empty=reg_form_empty, add_form_empty=add_form_empty, update_form=update_form, update_form_empty=update_form_empty, add_member_form=add_member_form, add_member_form_empty=add_member_form_empty, add_team_form=add_team_form, add_team_form_empty=add_team_form_empty, teams=current_teams, members=members, permission=permission, membership=membership)
+                 add_form=add_form, reg_form_empty=reg_form_empty, add_form_empty=add_form_empty, update_form=update_form,
+        update_form_empty=update_form_empty, add_member_form=add_member_form, add_member_form_empty=add_member_form_empty,
+        add_team_form=add_team_form, add_team_form_empty=add_team_form_empty, teams=current_teams, members=members,
+        permission=permission, membership=membership, orgs=orgs)
     return render_to_response(request, template, vals)
 
 @require_org_member
@@ -115,7 +130,13 @@ def orgs_members(request, org, template='orgs/orgs_members.html'):
     for user_role in user_roles:
         roles_list.append([user_role, user_role.get_qualified_id().replace(':', '_')])
 
-    vals = dict(org=organization, members=roles, couch_user=couch_user, user_roles=user_roles, default_role=OrganizationUserRole.get_default(), teams=current_teams, domains=current_domains, membership=membership, permission=permission, org_roles=roles_list)
+    org_names = user.organization_manager.get_items(user)
+    orgs = list()
+    for name in org_names:
+        orgs.append(Organization.get_by_name(name))
+
+
+    vals = dict(orgs=orgs, org=organization, members=roles, couch_user=couch_user, user_roles=user_roles, default_role=OrganizationUserRole.get_default(), teams=current_teams, domains=current_domains, membership=membership, permission=permission, org_roles=roles_list)
     return render_to_response(request, template, vals)
 
 @require_org_member
@@ -342,7 +363,13 @@ def orgs_team_members(request, org, team_id, add_member_form=None, template="org
     else:
         permission = OrganizationUserRole.get_default()
 
-    vals = dict(org=organization, team=team, teams=teams, members=members, nonmembers=non_members, domains=current_domains, team_domains=domains, team_nondomains=non_domains, permission=permission, membership=membership, add_member_form=add_member_form, add_member_form_empty=add_member_form_empty)
+    org_names = user.organization_manager.get_items(user)
+    orgs = list()
+    for name in org_names:
+        orgs.append(Organization.get_by_name(name))
+
+
+    vals = dict(orgs=orgs, org=organization, team=team, teams=teams, members=members, nonmembers=non_members, domains=current_domains, team_domains=domains, team_nondomains=non_domains, permission=permission, membership=membership, add_member_form=add_member_form, add_member_form_empty=add_member_form_empty)
     return render_to_response(request, template, vals)
 
 @require_org_member

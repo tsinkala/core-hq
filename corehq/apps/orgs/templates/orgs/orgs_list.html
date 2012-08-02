@@ -1,0 +1,15 @@
+{% extends "hqwebapp/centered.html" %}
+
+{% block centered-content %}
+
+        <h2> Organizations </h2>
+        <hr/>
+        <h4> List of organizations you are a member of</h4>
+        <hr/>
+        {% for org in orgs %}
+        <a href="{% url orgs_landing org.name %}"> {{ org.name }} ({{ org.title }})</a>
+        <br/>
+        <br/>
+        {% endfor %}
+
+{% endblock %}

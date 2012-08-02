@@ -1,7 +1,19 @@
-{% extends "hqwebapp/centered.html" %}
+{% extends "orgs/orgs_base.html" %}
 {% load hq_shared_tags %}
 {% load hq_bootstrap_tags %}
 {% load i18n %}
+
+{% block head %} {{ block.super }}
+<style type="text/css">
+    .stat_number {
+        font-size: 2.0em;
+    }
+
+    .stat_word {
+        font-size: 1.0em;
+    }
+</style>
+{% endblock %}
 
 {% block js-inline %}{{ block.super }}
 <script xmlns="http://www.w3.org/1999/html">
@@ -52,22 +64,33 @@
 {% endblock %}
 
 {% block page-title %}
-        <div class="container">
-<ul class="breadcrumb">
+    <ul class="breadcrumb">
     <li>
         <a href="{% url orgs_base %}"><strong>Organizations </strong></a><span class="divider">&gt;</span>
     </li>
     <li>
 
-        <a href="{% url orgs_landing org.name %}">{{ org.name }} ({{ org.title }})</a>
+        <a href="{% url orgs_landing org.name %}">{{ org.title }} <small>{{ org.name }}</small></a>
     </li>
     {% block breadcrumb %}
     {% endblock %}
-</ul>
-        </div>
+    </ul>
 {% endblock %}
 
-{% block centered-content %}
+{% block sidebar %}
+<nav>
+    <ul class="nav nav-list" id="organization-list">
+        <div class="nav-header">Organizations</div>
+        {% for orgo in orgs %}
+        <li><a href="{% url orgs_landing orgo.name %}">{{ orgo.name }} ({{ orgo.title }})</a></li>
+        {% endfor %}
+    </ul>
+</nav>
+{% endblock %}
+
+
+{% block main_column %}
+
         {% block org_header %}
     <section>
         <div class="row-fluid">
@@ -90,15 +113,18 @@
                 <div class="span7" style="padding-top:30px">
 
                     <div class="span2">
-                        <h1>{{ domains|length }} <small>Projects</small></h1>
+                        <div class="stat_number">{{ domains|length }} </div>
+                        <div class="stat_word"><small>Projects</small></div>
                     </div>
-                    {% if permission.view_teams %}
+                    {% if permission.edit_teams %}
                     <div class="span2">
-                        <h1>{{ teams|length }} <small>Teams</small></h1>
+                        <div class="stat_number">{{ teams|length }} </div>
+                        <div class="stat_word"><small>Teams</small></div>
                     </div>
                     {% endif %}
                     <div class="span2">
-                    <h1>{{ org.members|length }} <small>Members</small></h1>
+                        <div class="stat_number">{{ org.members|length }} </div>
+                        <div class="stat_word"><small>Members</small></div>
                     </div>
                 </div>
         </div>
@@ -111,7 +137,9 @@
         <div class="row-fluid">
             <div class="span4">
                 <ul class="nav nav-list">
-                    <li class="nav-header"><h2>Projects {% if permission.edit_projects %}<a href="#add_project_modal" id="add_project_btn" class="btn btn-success" data-toggle="modal" style="vertical-align: top; margin-top: 4px;"><i class="icon-plus icon-white"></i></a> <a href="#create_project_modal" id="create_project_btn" class="btn btn-success" data-toggle="modal" style="vertical-align: top; margin-top: 4px;"><i class="icon-pencil icon-white"></i></a>{% endif %}</h2></li>
+                    <li class="nav-header"><h2>Projects {% if permission.edit_projects %}
+                        <a href="#create_project_modal" id="create_project_btn" class="btn btn-success" data-toggle="modal" style="vertical-align: top; margin-top: 4px;"><i class="icon-plus icon-white"></i></a>
+                        <a href="#add_project_modal" id="add_project_btn" class="btn btn-success" data-toggle="modal" style="vertical-align: top; margin-top: 4px;"><i class="icon-download icon-white"></i></a> {% endif %}</h2></li>
                     {% for domain in domains %}
                     <li style="font-size:1.8em; line-height: 1.5em;">
                         <div class="pull-right">
