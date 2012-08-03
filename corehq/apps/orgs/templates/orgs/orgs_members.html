@@ -32,7 +32,12 @@
 {% block info_button %}
 {% endblock %}
 {% block org_content %}
+{% if membership.is_admin %}<a href="#add_member_modal" class="btn btn-success" data-toggle="modal" style="vertical-align: top; margin-top: 4px;"><i class="icon-plus icon-white"></i> Invite Web User </a>{% endif %}
+{% block add_member_redirect_url %}
+<input type="hidden" name="redirect_url" value="orgs_members" />
+{% endblock %}
 <div class="row-fluid">
+
         <h2>Members of Organization "{{ org.title }}"</h2>
         <table class="table table-striped table-bordered">
             <thead>
@@ -175,5 +180,6 @@
 
 {% endblock %}
 
-{% block modals %}
+{% block other_modals %}
 {% endblock %}
+

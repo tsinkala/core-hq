@@ -1,3 +1,4 @@
+from datetime import datetime
 from django.core.urlresolvers import reverse
 from django.http import HttpResponse, HttpResponseRedirect, Http404, HttpResponseForbidden
 from django.views.decorators.http import require_POST
@@ -5,7 +6,7 @@ from corehq.apps.domain.decorators import require_superuser
 from corehq.apps.orgs.decorators import require_org_member, require_org_project_manager, require_org_admin, require_org_team_manager
 from corehq.apps.registration.forms import DomainRegistrationForm
 from corehq.apps.orgs.forms import AddProjectForm, AddMemberForm, AddTeamForm, UpdateOrgInfo
-from corehq.apps.users.models import CouchUser, WebUser, AdminDomainUserRole, DomainUserRole, AdminOrganizationUserRole, OrganizationUserRole
+from corehq.apps.users.models import CouchUser, WebUser, AdminDomainUserRole, DomainUserRole, AdminOrganizationUserRole, OrganizationUserRole, Invitation
 from corehq.apps.users.views import require_can_edit_commcare_users
 from dimagi.utils.web import render_to_response, json_response, get_url_base
 from corehq.apps.orgs.models import Organization, Team, DeleteTeamRecord
@@ -107,7 +108,7 @@ def get_available_domains(request, org):
 
 @require_org_member
 @require_org_admin
-def orgs_members(request, org, template='orgs/orgs_members.html'):
+def orgs_members(request, org, template='orgs/orgs_members.html', add_member_form=None):
     organization = Organization.get_by_name(org)
     couch_user = request.couch_user
     members = [WebUser.get_by_user_id(user_id) for user_id in organization.members]
@@ -135,8 +136,16 @@ def orgs_members(request, org, template='orgs/orgs_members.html'):
     for name in org_names:
         orgs.append(Organization.get_by_name(name))
 
+    add_member_form_empty = not add_member_form
+    role_choices = OrganizationUserRole.role_choices(org)
+    swap(role_choices, 0, 3)
+    swap(role_choices, 1, 2)
+    add_member_form = add_member_form or AddMemberForm(org, role_choices=role_choices)
 
-    vals = dict(orgs=orgs, org=organization, members=roles, couch_user=couch_user, user_roles=user_roles, default_role=OrganizationUserRole.get_default(), teams=current_teams, domains=current_domains, membership=membership, permission=permission, org_roles=roles_list)
+    vals = dict(orgs=orgs, org=organization, members=roles, couch_user=couch_user, user_roles=user_roles,
+        default_role=OrganizationUserRole.get_default(), teams=current_teams, domains=current_domains,
+        membership=membership, permission=permission, org_roles=roles_list, add_member_form=add_member_form,
+        add_member_form_empty=add_member_form_empty)
     return render_to_response(request, template, vals)
 
 @require_org_member
@@ -235,23 +244,34 @@ def orgs_add_member(request, org, team_id=None):
         role_choices = OrganizationUserRole.role_choices(org)
         form = AddMemberForm(org, request.POST, role_choices=role_choices)
         if form.is_valid():
-            username = form.cleaned_data['member_email']
-            role_id = form.cleaned_data['role']
-            user = CouchUser.get_by_username(username)
-            user.organization_manager.add_membership(user, item=org)
-            user.organization_manager.set_role(user, org, role_id)
-            user.save()
+            data = form.cleaned_data
+            #            username = form.cleaned_data['email']
+#            role_id = form.cleaned_data['role']
+            #create invitation here, write email message, return to page
+            data["invited_by"] = request.couch_user.user_id
+            data["invited_on"] = datetime.utcnow()
+            data["organization"] = org
+            if team_id:
+                data['team_id'] = team_id
+            invite = Invitation(**data)
+            invite.save()
+            invite.send_activation_email()
+            messages.success(request, "Invitation sent to %s" % invite.email)
+            user = CouchUser.get_by_username(request.user.username)
             user_id = user.userID
-            organization = Organization.get_by_name(org)
-            organization.add_member(user_id)
-            messages.success(request, "Member Added!")
         else:
             messages.error(request, "Unable to add member")
             if 'redirect_url' in request.POST:
-                return orgs_team_members(request, org, team_id)
+                if request.POST['redirect_url'] == 'orgs_members':
+                    return orgs_members(request, org)
+                else:
+                    return orgs_team_members(request, org, team_id)
             return orgs_landing(request, org, add_member_form=form)
     if 'redirect_url' in request.POST:
-        return join_team(request, org, team_id, user_id)
+        if request.POST['redirect_url'] == 'orgs_members':
+            return orgs_members(request, org)
+        else:
+            return orgs_team_members(request, org, team_id)
     return HttpResponseRedirect(reverse('orgs_landing', args=[org]))
 
 @require_org_member

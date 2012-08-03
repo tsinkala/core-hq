@@ -141,7 +141,7 @@
                         <a href="#create_project_modal" id="create_project_btn" class="btn btn-success" data-toggle="modal" style="vertical-align: top; margin-top: 4px;"><i class="icon-plus icon-white"></i></a>
                         <a href="#add_project_modal" id="add_project_btn" class="btn btn-success" data-toggle="modal" style="vertical-align: top; margin-top: 4px;"><i class="icon-download icon-white"></i></a> {% endif %}</h2></li>
                     {% for domain in domains %}
-                    <li style="font-size:1.8em; line-height: 1.5em;">
+                    <li style="font-size:1.8em; line-height: 1.5em; overflow-x: hidden;">
                         <div class="pull-right">
                             {% if permission.edit_projects %}<a href="#remove_project_modal{{ domain.get_id }}" data-toggle="modal" class="btn"><i class="icon-remove"></i></a>{% endif %}
                         </div>
@@ -185,7 +185,7 @@
                         {% if membership.is_admin %}<a href="{% url orgs_members org.name %}" class="btn btn-success" style="vertical-align: top; margin-top: 4px;">Roles</a>{% endif %}</h2>
                     </li>
                     {% for member in members %}
-                    <li style="font-size:1.3em; line-height: 1.5em;">- {{ member.username }}{% if member.first_name and member.last_name %} <small>({{ member.full_name }})</small>{% endif %}</li>
+                    <li style="font-size:1.3em; line-height: 1.5em;">{{ member.username }}{% if member.first_name and member.last_name %} <small>({{ member.full_name }})</small>{% endif %}</li>
                     {% endfor %}
                 </ul>
 

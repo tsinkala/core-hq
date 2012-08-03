@@ -47,13 +47,13 @@ class AddMemberForm(RoleForm):
         super(AddMemberForm, self).__init__(*args, **kwargs)
 
 
-    member_email = forms.CharField(label = "User Email", max_length=25)
+    email = forms.CharField(label = "User Email", max_length=25)
     role = forms.ChoiceField(choices=())
 
 
 
-    def clean_member_email(self):
-        data = self.cleaned_data['member_email'].strip().lower()
+    def clean_email(self):
+        data = self.cleaned_data['email'].strip().lower()
         validate_email(data)
         exists = CouchUser.get_by_username(data)
 
