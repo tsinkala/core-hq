@@ -629,9 +629,10 @@ class MembershipManager(object):
 
     def is_member_of(self, instance, item_qs):
         try:
-            return item_qs.name in self.get_items(instance) or instance.is_global_admin()
+            return instance.is_global_admin() or item_qs.name in self.get_items(instance)
         except Exception:
-            return item_qs in self.get_items(instance) or instance.is_global_admin()
+            return instance.is_global_admin() or item_qs in self.get_items(instance)
+
 
     def get_role(self, instance, item=None):
         """
@@ -1034,9 +1035,9 @@ class CouchUser(Document, DjangoUserMixin, UnicodeMixIn):
         either natively or through a team
         """
         try:
-            return domain_qs.name in self.get_domains() or self.is_global_admin()
+            return self.is_global_admin() or domain_qs.name in self.get_domains()
         except Exception:
-            return domain_qs in self.get_domains() or self.is_global_admin()
+            return self.is_global_admin() or domain_qs in self.get_domains()
 
     @classmethod
     def get_by_user_id(cls, userID, domain=None):
