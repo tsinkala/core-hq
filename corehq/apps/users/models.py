@@ -1687,7 +1687,7 @@ class Invitation(Document):
 
     def get_inviter(self):
         if self._inviter is None:
-            self._inviter = CouchUser.get_by_username(self.invited_by)
+            self._inviter = CouchUser.get_by_user_id(self.invited_by)
             if self._inviter.user_id != self.invited_by:
                 self.invited_by = self._inviter.user_id
                 self.save()
