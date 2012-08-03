@@ -1687,15 +1687,13 @@ class Invitation(Document):
 
     def get_inviter(self):
         if self._inviter is None:
-            self._inviter = CouchUser.get_by_user_id(self.invited_by)
+            self._inviter = CouchUser.get_by_username(self.invited_by)
             if self._inviter.user_id != self.invited_by:
                 self.invited_by = self._inviter.user_id
                 self.save()
         return self._inviter
 
     def send_activation_email(self):
-        import pdb
-        pdb.set_trace()
         if self.domain:
             url = "http://%s%s" % (Site.objects.get_current().domain,
                                    reverse("corehq.apps.registration.views.accept_invitation", args=[self.domain, self.get_id]))

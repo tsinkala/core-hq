@@ -258,7 +258,6 @@ def orgs_add_member(request, org, team_id=None):
             invite.send_activation_email()
             messages.success(request, "Invitation sent to %s" % invite.email)
             user = CouchUser.get_by_username(request.user.username)
-            user_id = user.userID
         else:
             messages.error(request, "Unable to add member")
             if 'redirect_url' in request.POST:
