@@ -57,13 +57,12 @@ class AddMemberForm(RoleForm):
         validate_email(data)
         exists = CouchUser.get_by_username(data)
 
-        if not exists:
-            raise forms.ValidationError('User not found!')
 
         org = Organization.get_by_name(self.org_name)
-        for id in org.members:
-            if id == exists.get_id:
-                raise forms.ValidationError('User is already part of this organization!')
+        if exists:
+            for id in org.members:
+                if id == exists.get_id:
+                    raise forms.ValidationError('User is already part of this organization!')
 
         return data
 
