@@ -14,7 +14,7 @@ def require_org_member(view):
         if user.organization_manager.is_member_of(user, org):
             return view(request, org, *args, **kwargs)
         else:
-            return HttpResponseRedirect(reverse("domain_select"))
+            return HttpResponseRedirect(reverse("orgs_base"))
     return inner
 
 def require_org_admin(view):

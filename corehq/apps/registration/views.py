@@ -264,9 +264,10 @@ def accept_invitation(request, subject, invitation_id):
                 organization = Organization.get_by_name(subject)
                 organization.add_member(user_id)
 
-                team = Team.get(invitation.team_id)
-                if team:
-                    team.add_member(user_id)
+                if invitation.team_id != 'none':
+                    team = Team.get(invitation.team_id)
+                    if team:
+                        team.add_member(user_id)
 
                 messages.success(request, "You have been added to the %s organization" % subject)
                 return HttpResponseRedirect(reverse("orgs_landing", args=[subject,]))
