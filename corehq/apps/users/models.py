@@ -396,7 +396,7 @@ class Membership(DocumentSchema):
     @property
     def role(self):
         if self.is_admin:
-            return self.classes.AdminUserRole(self.subject or self.domain)
+            return self.classes.AdminUserRole(self.subject)
         elif self.role_id:
             return self.classes.UserRole.get(self.role_id)
         else:
@@ -427,6 +427,9 @@ class DomainMembership(Membership):
     @classmethod
     def wrap(cls, data):
         # Do a just-in-time conversion of old permissions
+        if data.get('domain'):
+            data['subject'] = data['domain']
+            del data['domain']
         old_permissions = data.get('permissions')
         if old_permissions is not None:
             del data['permissions']
@@ -453,7 +456,7 @@ class DomainMembership(Membership):
 
 
                 self = super(DomainMembership, cls).wrap(data)
-                self.role_id = UserRole.get_or_create_with_permissions(self.domain, custom_permissions).get_id
+                self.role_id = DomainUserRole.get_or_create_with_permissions(self.subject, custom_permissions).get_id
                 return self
         return super(DomainMembership, cls).wrap(data)
 
@@ -509,8 +512,6 @@ class MembershipManager(object):
         item_membership = None
         try:
             for i in getattr(instance, self.item_memberships):
-                if not i.subject:
-                    i.subject = i.domain
                 if i.subject == item:
                     item_membership = i
                     if item not in getattr(instance, self.items):
@@ -526,8 +527,6 @@ class MembershipManager(object):
 
     def add_membership(self, instance, item, **kwargs):
         for i in getattr(instance, self.item_memberships):
-            if not i.subject:
-                i.subject = i.domain
             if i.subject == item:
                 if item not in getattr(instance, self.items):
                     raise CouchUser.Inconsistent(self.item_label + "'%s' is in " + self.item_membership_label +  "but not domains" % item)
@@ -562,8 +561,6 @@ class MembershipManager(object):
     def delete_membership(self, instance, item, create_record=False):
         record = ''
         for i, item_membership in enumerate(getattr(instance, self.item_memberships)):
-            if not item_membership.subject:
-                item_membership.subject = item_membership.domain
             if item_membership.subject == item:
                 if create_record:
                     record = RemoveWebUserRecord(
@@ -606,7 +603,7 @@ class MembershipManager(object):
 
 
     def get_items(self, instance):
-        items = [item_memberships.subject or item_memberships.domain for item_memberships in getattr(instance, self.item_memberships)]
+        items = [item_memberships.subject for item_memberships in getattr(instance, self.item_memberships)]
         if set(items) == set(getattr(instance, self.items)):
             return items
         else:

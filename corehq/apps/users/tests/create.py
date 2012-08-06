@@ -57,9 +57,9 @@ class CreateTestCase(TestCase):
         self.assertEqual(couch_user.username, username)
         self.assertEqual(couch_user.email, email)
         couch_user.add_domain_membership('domain1')
-        self.assertEqual(couch_user.domain_memberships[0].domain or couch_user.domain_memberships[0].subject, 'domain1')
+        self.assertEqual(couch_user.domain_memberships[0].subject, 'domain1')
         couch_user.add_domain_membership('domain2')
-        self.assertEqual(couch_user.domain_memberships[1].domain or couch_user.domain_memberships[1].subject, 'domain2')
+        self.assertEqual(couch_user.domain_memberships[1].subject, 'domain2')
         django_user = couch_user.get_django_user()
         self.assertEqual(couch_user.user_id, CouchUser.from_django_user(django_user).user_id)
 
