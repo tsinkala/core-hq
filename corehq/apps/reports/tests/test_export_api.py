@@ -45,7 +45,8 @@ class ExportTest(TestCase):
             XFormInstance.wrap(form).delete()
         dom = create_domain(DOMAIN)
         self.couch_user = WebUser.create(None, "test", "foobar")
-        self.couch_user.add_domain_membership(DOMAIN, is_admin=True)
+        self.couch_user.add_domain_membership(DOMAIN)
+        self.couch_user.set_role(DOMAIN, 'admin')
         self.couch_user.save()
         
     def tearDown(self):

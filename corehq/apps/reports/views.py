@@ -56,8 +56,8 @@ datespan_default = datespan_in_request(
 )
 
 
-require_form_export_permission = require_permission(DomainPermissions.view_report, 'corehq.apps.reports._global.export.ExcelExportReport', login_decorator=None)
-require_case_export_permission = require_permission(DomainPermissions.view_report, 'corehq.apps.reports._global.export.CaseExportReport', login_decorator=None)
+require_form_export_permission = require_permission('view_report', 'corehq.apps.reports._global.export.ExcelExportReport', login_decorator=None)
+require_case_export_permission = require_permission('view_report', 'corehq.apps.reports._global.export.CaseExportReport', login_decorator=None)
 require_can_view_all_reports = require_permission(DomainPermissions.view_reports)
 
 @login_and_domain_required

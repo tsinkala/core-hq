@@ -96,6 +96,7 @@ class OldRoles(object):
 class Permissions(DocumentSchema):
 
     def has(self, permission, data=None):
+        print permission
         if data:
             return getattr(self, permission)(data)
         else:
@@ -133,12 +134,15 @@ class Permissions(DocumentSchema):
         return True
 
 class AllOrSomePermission(object):
-    def __init__(self, all_attr, some_attr):
+    def __init__(self, all_attr, some_attr, name):
         self.all_attr = all_attr
         self.some_attr = some_attr
+        self.name = name
 
     def __get__(self, instance, owner):
-        return functools.partial(self._fn, instance)
+        if instance:
+            return functools.partial(self._fn, instance)
+
 
     def _fn(self, instance, item, value=None):
         if value is None:
@@ -165,7 +169,7 @@ class DomainPermissions(Permissions):
     view_reports = BooleanProperty(default=False)
     view_report_list = StringListProperty(default=[])
 
-    view_report = AllOrSomePermission('view_reports', 'view_report_list')
+    view_report = AllOrSomePermission('view_reports', 'view_report_list', 'view_report')
 
 
     @classmethod
@@ -189,7 +193,7 @@ class OrganizationPermissions(Permissions):
     view_teams = BooleanProperty(default=False)
     view_team_list = StringListProperty(default=[])
 
-    view_team = AllOrSomePermission('view_teams', 'view_team_list')
+    view_team = AllOrSomePermission('view_teams', 'view_team_list', 'view_team')
 
 
     @classmethod
@@ -1148,8 +1152,6 @@ class CouchUser(Document, DjangoUserMixin, UnicodeMixIn):
             if perm:
                 def fn(domain=None, data=None):
                     domain = domain or self.current_domain
-                    print domain, perm, data
-                    print self.has_permission(domain, perm, data)
                     return self.has_permission(domain, perm, data)
                 fn.__name__ = item
                 return fn
