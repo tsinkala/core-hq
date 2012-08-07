@@ -40,9 +40,7 @@ def orgs_landing(request, org, template="orgs/orgs_landing.html", form=None, add
 
     reg_form = form or DomainRegistrationForm(initial={'org': organization.name})
 
-    role_choices = OrganizationUserRole.role_choices(org)
-    swap(role_choices, 0, 3)
-    swap(role_choices, 1, 2)
+    role_choices = org_role_choices(org)
     add_member_form = add_member_form or AddMemberForm(org, role_choices=role_choices)
     add_team_form = add_team_form or AddTeamForm(org)
 
@@ -51,11 +49,7 @@ def orgs_landing(request, org, template="orgs/orgs_landing.html", form=None, add
 
     members = [WebUser.get_by_user_id(user_id) for user_id in organization.members]
 
-    membership = user.organization_manager.get_membership(user, item=org)
-    if membership:
-        permission = membership.permissions
-    else:
-        permission = OrganizationUserRole.get_default()
+    membership, permission = get_membership_and_permission(user, org)
 
     org_domains = Domain.get_by_organization(org)
     if user.is_global_admin() or user.organization_manager.is_admin(user):
@@ -121,11 +115,8 @@ def orgs_members(request, org, template='orgs/orgs_members.html', add_member_for
     current_domains = Domain.get_by_organization(org)
     username = request.user.username
     user = WebUser.get_by_username(username)
-    membership = user.organization_manager.get_membership(user, item=org)
-    if membership:
-        permission = membership.permissions
-    else:
-        permission = OrganizationUserRole.get_default()
+
+    membership, permission = get_membership_and_permission(user, org)
 
     roles_list = []
     for user_role in user_roles:
@@ -137,9 +128,7 @@ def orgs_members(request, org, template='orgs/orgs_members.html', add_member_for
         orgs.append(Organization.get_by_name(name))
 
     add_member_form_empty = not add_member_form
-    role_choices = OrganizationUserRole.role_choices(org)
-    swap(role_choices, 0, 3)
-    swap(role_choices, 1, 2)
+    role_choices = org_role_choices(org)
     add_member_form = add_member_form or AddMemberForm(org, role_choices=role_choices)
 
     vals = dict(orgs=orgs, org=organization, members=roles, couch_user=couch_user, user_roles=user_roles,
@@ -318,7 +307,7 @@ def orgs_logo(request, org):
         image = organization.get_logo()
     else:
         image = None
-    return HttpResponse(image, content_type='image/gif')
+    return HttpResponse(image)
 
 @require_org_member
 @require_org_team_manager
@@ -338,9 +327,7 @@ def orgs_team_members(request, org, team_id, add_member_form=None, template="org
     current_domains = Domain.get_by_organization(org)
 
     add_member_form_empty = not add_member_form
-    role_choices = OrganizationUserRole.role_choices(org)
-    swap(role_choices, 0, 3)
-    swap(role_choices, 1, 2)
+    role_choices = org_role_choices(org)
     add_member_form = add_member_form or AddMemberForm(org, role_choices=role_choices)
 
     #check that the team exists
@@ -373,14 +360,10 @@ def orgs_team_members(request, org, team_id, add_member_form=None, template="org
     all_org_members = WebUser.view("_all_docs", keys=all_org_member_ids, include_docs=True).all()
     non_members = [member for member in all_org_members if member.user_id not in member_ids]
 
-
     username = request.user.username
     user = WebUser.get_by_username(username)
-    membership = user.organization_manager.get_membership(user, item=org)
-    if membership:
-        permission = membership.permissions
-    else:
-        permission = OrganizationUserRole.get_default()
+
+    membership, permission = get_membership_and_permission(user, org)
 
     org_names = user.organization_manager.get_items(user)
     orgs = list()
@@ -388,7 +371,9 @@ def orgs_team_members(request, org, team_id, add_member_form=None, template="org
         orgs.append(Organization.get_by_name(name))
 
 
-    vals = dict(orgs=orgs, org=organization, team=team, teams=teams, members=members, nonmembers=non_members, domains=current_domains, team_domains=domains, team_nondomains=non_domains, permission=permission, membership=membership, add_member_form=add_member_form, add_member_form_empty=add_member_form_empty)
+    vals = dict(orgs=orgs, org=organization, team=team, teams=teams, members=members, nonmembers=non_members,
+        domains=current_domains, team_domains=domains, team_nondomains=non_domains, permission=permission,
+        membership=membership, add_member_form=add_member_form, add_member_form_empty=add_member_form_empty)
     return render_to_response(request, template, vals)
 
 @require_org_member
@@ -516,3 +501,17 @@ def swap(list, index1, index2):
     list[index2] = list[index1]
     list[index1] = temp
     return list
+
+def org_role_choices(org):
+    role_choices = OrganizationUserRole.role_choices(org)
+    swap(role_choices, 0, 3)
+    swap(role_choices, 1, 2)
+    return role_choices
+
+def get_membership_and_permission(user, org):
+    membership = user.organization_manager.get_membership(user, item=org)
+    if membership:
+        permission = membership.permissions
+    else:
+        permission = OrganizationUserRole.get_default()
+    return membership, permission

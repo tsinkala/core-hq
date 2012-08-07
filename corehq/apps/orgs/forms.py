@@ -110,7 +110,6 @@ class AddTeamForm(forms.Form):
 
 class UpdateOrgInfo(OrganizationRegistrationForm):
     def __init__(self, *args, **kwargs):
-        # Value of 'kind' is irrelevant in this context
         super(UpdateOrgInfo, self).__init__(*args, **kwargs)
         del self.fields['org_name']
         del self.fields['tos_confirmed']
