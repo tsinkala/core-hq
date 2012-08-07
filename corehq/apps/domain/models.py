@@ -98,6 +98,9 @@ class Domain(Document):
     phone_model = StringProperty()
     attribution_notes = StringProperty()
 
+    image_path = StringProperty()
+    image_type = StringProperty()
+
     migrations = SchemaProperty(DomainMigrations)
 
     cached_properties = DictProperty()
@@ -412,6 +415,16 @@ class Domain(Document):
     def snapshots(self):
         return Domain.view('domain/snapshots', startkey=[self.name, {}], endkey=[self.name], include_docs=True, descending=True)
 
+    def published_snapshot(self):
+        snapshots = self.snapshots().all()
+        for snapshot in snapshots:
+            if snapshot.published:
+                return snapshot
+        if len(snapshots) > 0:
+            return snapshots[0]
+        else:
+            return None
+
     @classmethod
     def published_snapshots(cls, include_unapproved=False, page=None, per_page=10):
         skip = None
@@ -446,7 +459,7 @@ class Domain(Document):
 
     def display_name(self):
         if self.is_snapshot:
-            return "Snapshot of %s" % self.copied_from.display_name()
+            return "Snapshot of %s" % self.copied_from().display_name()
         if self.organization:
             return self.slug
         else:
