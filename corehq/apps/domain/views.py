@@ -8,7 +8,7 @@ from django.shortcuts import redirect
 
 from corehq.apps.domain.decorators import REDIRECT_FIELD_NAME, login_required_late_eval_of_LOGIN_URL, login_and_domain_required, domain_admin_required, require_previewer
 from corehq.apps.domain.forms import DomainSelectionForm, DomainGlobalSettingsForm,\
-    DomainMetadataForm, SnapshotSettingsForm, SnapshotApplicationForm
+    DomainMetadataForm, SnapshotSettingsForm, SnapshotApplicationForm, OrgSnapshotSettingsForm
 from corehq.apps.domain.models import Domain, LICENSES
 from corehq.apps.domain.utils import get_domained_url, normalize_domain_name
 
@@ -259,32 +259,59 @@ def create_snapshot(request, domain):
     domain = Domain.get_by_name(domain)
     #latest_applications = [app.get_latest_saved() or app for app in domain.applications()]
     if request.method == 'GET':
-        form = SnapshotSettingsForm(initial={
-                'default_timezone': domain.default_timezone,
-                'case_sharing': json.dumps(domain.case_sharing),
-                'city': domain.city,
-                'country': domain.country,
-                'region': domain.region,
-                'project_type': domain.project_type,
-                'share_multimedia': True,
-                'license': domain.license
-            })
+        if domain.organization:
+            form = OrgSnapshotSettingsForm(initial={
+                    'default_timezone': domain.default_timezone,
+                    'case_sharing': json.dumps(domain.case_sharing),
+                    'city': domain.city,
+                    'country': domain.country,
+                    'region': domain.region,
+                    'project_type': domain.project_type,
+                    'share_multimedia': True,
+                    'license': domain.license
+                })
+        else:
+            form = SnapshotSettingsForm(initial={
+                    'default_timezone': domain.default_timezone,
+                    'case_sharing': json.dumps(domain.case_sharing),
+                    'city': domain.city,
+                    'country': domain.country,
+                    'region': domain.region,
+                    'project_type': domain.project_type,
+                    'share_multimedia': True,
+                    'license': domain.license
+                })
         published_snapshot = domain.published_snapshot() or domain
         published_apps = {}
         if published_snapshot is not None:
-            form = SnapshotSettingsForm(initial={
-                'default_timezone': published_snapshot.default_timezone,
-                'case_sharing': json.dumps(published_snapshot.case_sharing),
-                'city': published_snapshot.city,
-                'country': published_snapshot.country,
-                'region': published_snapshot.region,
-                'project_type': published_snapshot.project_type,
-                'license': published_snapshot.license,
-                'title': published_snapshot.title,
-                'author': published_snapshot.author,
-                'share_multimedia': True,
-                'description': published_snapshot.description
-            })
+            if domain.organization:
+                form = OrgSnapshotSettingsForm(initial={
+                    'default_timezone': published_snapshot.default_timezone,
+                    'case_sharing': json.dumps(published_snapshot.case_sharing),
+                    'city': published_snapshot.city,
+                    'country': published_snapshot.country,
+                    'region': published_snapshot.region,
+                    'project_type': published_snapshot.project_type,
+                    'license': published_snapshot.license,
+                    'title': published_snapshot.title,
+                    'author': published_snapshot.author,
+                    'share_multimedia': True,
+                    'description': published_snapshot.description
+                })
+            else:
+                form = SnapshotSettingsForm(initial={
+                    'default_timezone': published_snapshot.default_timezone,
+                    'case_sharing': json.dumps(published_snapshot.case_sharing),
+                    'city': published_snapshot.city,
+                    'country': published_snapshot.country,
+                    'region': published_snapshot.region,
+                    'project_type': published_snapshot.project_type,
+                    'license': published_snapshot.license,
+                    'title': published_snapshot.title,
+                    'author': published_snapshot.author,
+                    'share_multimedia': True,
+                    'description': published_snapshot.description
+                })
             for app in published_snapshot.full_applications():
                 published_apps[app.original_doc] = app
         app_forms = []
@@ -311,7 +338,10 @@ def create_snapshot(request, domain):
              'app_forms': app_forms,
              'autocomplete_fields': ('project_type', 'phone_model', 'user_type', 'city', 'country', 'region')})
     elif request.method == 'POST':
-        form = SnapshotSettingsForm(request.POST, request.FILES)
+        if domain.organizaiton:
+            form = OrgSnapshotSettingsForm(request.POST, request.FILES)
+        else:
+            form = SnapshotSettingsForm(request.POST, request.FILES)
         app_forms = []
         publishing_apps = False
         for app in domain.applications():

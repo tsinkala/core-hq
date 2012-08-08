@@ -127,6 +127,13 @@ class SnapshotSettingsForm(SnapshotSettingsMixin):
             'share_multimedia',
             'image',]
 
+class OrgSnapshotSettingsForm(SnapshotSettingsForm):
+    def __init__(self, *args, **kwargs):
+        super(OrgSnapshotSettingsForm, self).__init__(*args, **kwargs)
+        del self.fields['author']
+
+
+
 ########################################################################################################
 
 class DomainGlobalSettingsForm(forms.Form):
