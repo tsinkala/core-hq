@@ -13,8 +13,8 @@ from corehq.apps.orgs.models import Organization, Team, DeleteTeamRecord
 from corehq.apps.domain.models import Domain
 from django.contrib import messages
 from dimagi.utils.couch.resource_conflict import repeat
-
-
+from PIL import Image
+import cStringIO
 
 def orgs_base(request, template="orgs/orgs_list.html"):
     username = request.user.username
@@ -202,7 +202,11 @@ def orgs_update_info(request, org):
 
             organization.save()
             if logo:
-                organization.put_attachment(content=logo.read(), name=logo.name)
+                im = Image.open(logo)
+                out = cStringIO.StringIO()
+                im.thumbnail((100, 100), Image.ANTIALIAS)
+                im.save(out, 'PNG')
+                organization.put_attachment(content=out.getvalue(), name=logo.name)
         else:
             return orgs_landing(request, org, update_form=form)
     return HttpResponseRedirect(reverse('orgs_landing', args=[org]))
@@ -307,7 +311,7 @@ def orgs_logo(request, org):
         image = organization.get_logo()
     else:
         image = None
-    return HttpResponse(image)
+    return HttpResponse(image, content_type="image/png")
 
 @require_org_member
 @require_org_team_manager
