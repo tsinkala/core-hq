@@ -342,7 +342,7 @@ def create_snapshot(request, domain):
              'app_forms': app_forms,
              'autocomplete_fields': ('project_type', 'phone_model', 'user_type', 'city', 'country', 'region')})
     elif request.method == 'POST':
-        if domain.organizaiton:
+        if domain.organization:
             form = OrgSnapshotSettingsForm(request.POST, request.FILES)
         else:
             form = SnapshotSettingsForm(request.POST, request.FILES)
@@ -385,7 +385,8 @@ def create_snapshot(request, domain):
         new_domain.city = request.POST['city']
         new_domain.country = request.POST['country']
         new_domain.title = request.POST['title']
-        new_domain.author = request.POST['author']
+        if not domain.organization:
+            new_domain.author = request.POST['author']
         for snapshot in domain.snapshots():
             if snapshot.published and snapshot._id != new_domain._id:
                 snapshot.published = False
