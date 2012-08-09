@@ -6,7 +6,7 @@ from corehq.apps.reports.export import BulkExportHelper, ApplicationBulkExportHe
 from corehq.apps.reports.models import FormExportSchema
 from corehq.apps.users.decorators import require_permission
 from corehq.apps.users.export import export_users
-from corehq.apps.users.models import Permissions, DomainPermissions
+from corehq.apps.users.models import DomainPermissions
 import couchexport
 from couchexport.export import UnsupportedExportFormat, export_raw
 from couchexport.util import FilterFunction

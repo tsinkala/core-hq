@@ -13,7 +13,7 @@ from django.views.decorators.http import require_POST
 from datetime import datetime, date
 from xlrd import xldate_as_tuple
 from corehq.apps.users.decorators import require_permission
-from corehq.apps.users.models import Permissions, DomainPermissions
+from corehq.apps.users.models import DomainPermissions
 
 require_can_edit_data = require_permission(DomainPermissions.edit_data)
 
