@@ -521,7 +521,7 @@ class MembershipManager(object):
                 raise CouchUser.Inconsistent(self.item_label + " '%s' is in " % item + self.item_label + " but not in " + self.item_membership_label)
         except CouchUser.Inconsistent as e:
             logging.warning(e)
-            consistent_list =  [i.subject or i.domain for i in getattr(instance, self.item_memberships)]
+            consistent_list =  [i.subject for i in getattr(instance, self.item_memberships)]
             setattr(instance, self.items, consistent_list)
         return item_membership
 

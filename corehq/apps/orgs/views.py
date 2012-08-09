@@ -387,7 +387,6 @@ def add_team(request, org):
     team = Team.get_by_org_and_name(org, team_name)
     if not team:
         team = Team(name=team_name, organization=org)
-        team.is_global_admin()
         team.save()
     return HttpResponseRedirect(reverse("orgs_team_members", args=(org, team.get_id)))
 
