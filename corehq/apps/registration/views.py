@@ -250,7 +250,7 @@ def accept_invitation(request, subject, invitation_id):
             couch_user = CouchUser.from_django_user(request.user)
             if invitation.domain:
                 couch_user.add_domain_membership(domain=subject)
-                couch_user.set_role(subject, invitation.role)
+                couch_user.set_role(subject, invitation.role or 'admin')
                 couch_user.save()
                 invitation.is_accepted = True
                 invitation.save()
@@ -285,7 +285,7 @@ def accept_invitation(request, subject, invitation_id):
             if form.is_valid():
                 if invitation.domain:
                     user = activate_new_user(form, is_domain_admin=False, domain=invitation.domain)
-                    user.set_role(subject, invitation.role)
+                    user.set_role(subject, invitation.role or 'admin')
                 else:
                     user = activate_new_user(form, is_domain_admin=False)
                     user.organization_manager.add_membership(user, item=subject)
