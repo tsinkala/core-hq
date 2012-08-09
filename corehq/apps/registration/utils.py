@@ -42,7 +42,7 @@ def request_new_domain(request, form, org, new_user=True):
         dom_req.activation_guid = uuid.uuid1().hex
 
     if org:
-        new_domain = Domain(name=org + '-' + form.cleaned_data['domain_name'],
+        new_domain = Domain(name=org + ':' + form.cleaned_data['domain_name'],
                             is_active=False, slug = form.cleaned_data['domain_name'],
                             date_created=datetime.utcnow(), organization=org)
     else:
