@@ -249,6 +249,8 @@ def copy_snapshot_app(request, domain):
 @require_previewer # remove for production
 def copy_snapshot(request, domain):
     dom = Domain.get_by_name(domain)
+    import pdb
+    pdb.set_trace()
     if request.method == "POST" and dom.is_snapshot:
         args = {'domain_name': request.POST['new_project_name'], 'tos_confirmed': True}
         form = DomainRegistrationForm(args)
@@ -264,7 +266,7 @@ def copy_snapshot(request, domain):
             return project_info(request, domain)
 
         messages.success(request, "Project copied successfully!")
-        return redirect("domain_project_settings", new_domain.name)
+        return HttpResponseRedirect(reverse('domain_project_settings', args=[new_domain.name]))
 
 @require_previewer # remove for production
 def project_image(request, domain):
