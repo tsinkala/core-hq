@@ -32,8 +32,6 @@ def require_org_admin(view):
             return HttpResponseRedirect(reverse('orgs_landing', args=(org,)))
     return inner
 
-
-
 def require_org_team_manager(view):
     """
     decorator to prevent nonmembers of organizations from accessing an organization's page
@@ -63,7 +61,6 @@ def require_org_project_manager(view):
         else:
             return HttpResponseRedirect(reverse('orgs_landing', args=(org,)))
     return inner
-
 
 def get_membership_and_permission(user, org):
     membership = user.organization_manager.get_membership(user, item=org)

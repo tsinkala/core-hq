@@ -22,7 +22,6 @@ class Organization(Document):
     members = StringListProperty()
     default_timezone = StringProperty(default=getattr(settings, "TIME_ZONE", "UTC"))
 
-
     @classmethod
     def get_by_name(cls, name):
         result = cls.view("orgs/by_name",
@@ -40,7 +39,7 @@ class Organization(Document):
 
     def get_logo(self):
         if self.logo_filename:
-            return (self.fetch_attachment(self.logo_filename), self._attachments[self.logo_filename]['content_type'])
+            return self.fetch_attachment(self.logo_filename), self._attachments[self.logo_filename]['content_type']
         else:
             return None
 
@@ -53,21 +52,11 @@ class Organization(Document):
             self.save()
         return self.members
 
-
-
 from corehq.apps.users.models import DomainAuthorizableMixin
 class Team(UndoableDocument, DomainAuthorizableMixin):
     name = StringProperty()
     organization = StringProperty()
     member_ids = StringListProperty()
-
-#    def add_member(self, guid):
-#    #consistency check to make sure member is not already on the team
-#        if guid in self.members:
-#            return False
-#        self.members.append(guid)
-#        self.save()
-#        return self.members
 
     def add_member(self, couch_user_id):
         from corehq.apps.users.models import WebUser

@@ -29,12 +29,6 @@ This project will be given a new name within this organization. You may leave it
             raise forms.ValidationError('A project with that name already exists.')
         return data
 
-#    def clean_domain_name(self):
-#        data = self.cleaned_data['domain_name'].strip().lower()
-#        if not Domain.get_by_name(data):
-#            raise forms.ValidationError('This project does not exist.')
-#        return data
-
     def clean(self):
         for field in self.cleaned_data:
             if isinstance(self.cleaned_data[field], basestring):
@@ -46,29 +40,19 @@ class AddMemberForm(RoleForm):
         self.org_name = org_name
         super(AddMemberForm, self).__init__(*args, **kwargs)
 
-
     email = forms.CharField(label = "User Email", max_length=25)
     role = forms.ChoiceField(choices=())
-
-
 
     def clean_email(self):
         data = self.cleaned_data['email'].strip().lower()
         validate_email(data)
         exists = CouchUser.get_by_username(data)
-
-
         org = Organization.get_by_name(self.org_name)
         if exists:
             for id in org.members:
                 if id == exists.get_id:
                     raise forms.ValidationError('User is already part of this organization!')
-
         return data
-
-#    def clean_member_role(self):
-#        data = self.cleaned_data['member_role']
-#        return data
 
     def clean(self):
         for field in self.cleaned_data:
@@ -76,23 +60,7 @@ class AddMemberForm(RoleForm):
                 self.cleaned_data[field] = self.cleaned_data[field].strip()
         return self.cleaned_data
 
-#class AddMemberToTeamForm(forms.Form):
-#
-#    def __init__(self, org_name, *args, **kwargs):
-#        super(AddMemberToTeamForm, self).__init__(*args, **kwargs)
-#        self.teams = Team.get_by_org(org_name)
-#        self.team_names = [team.name for team in self.teams]
-#        self.team = forms.ChoiceField(label="Team", choices=self.team_names)
-#        self.fields['teams'] = self.team
-#
-#    @property
-#    def organization(self):
-#        return self.org_name
-#
-
-
 class AddTeamForm(forms.Form):
-
     team = forms.CharField(label="Team Name", max_length=20)
 
     def __init__(self, org_name, *args, **kwargs):
@@ -106,7 +74,6 @@ class AddTeamForm(forms.Form):
             if t.name == data:
                 raise forms.ValidationError('A team with that name already exists.')
         return data
-
 
 class UpdateOrgInfo(OrganizationRegistrationForm):
     def __init__(self, *args, **kwargs):

@@ -32,25 +32,28 @@ def orgs_landing(request, org, template="orgs/orgs_landing.html", form=None, add
     username = request.user.username
     user = WebUser.get_by_username(username)
 
+    #create empty-form variables for form drop-down javascript in landing page
     reg_form_empty = not form
     add_form_empty = not add_form
     add_member_form_empty = not add_member_form
     add_team_form_empty = not add_team_form
     update_form_empty = not update_form
 
+    #set up forms for adding new domain, member, team, info
     reg_form = form or DomainRegistrationForm(initial={'org': organization.name})
-
     role_choices = org_role_choices(org)
     add_member_form = add_member_form or AddMemberForm(org, role_choices=role_choices)
     add_team_form = add_team_form or AddTeamForm(org)
-
     update_form = update_form or UpdateOrgInfo(initial={'org_title': organization.title, 'email': organization.email, 'url': organization.url, 'location': organization.location})
-    current_teams = Team.get_by_org(org)
 
+    #teams, members
+    current_teams = Team.get_by_org(org)
     members = [WebUser.get_by_user_id(user_id) for user_id in organization.members]
 
+    #membership, permissions
     membership, permission = get_membership_and_permission(user, org)
 
+    #create the list of domains to be displayed in the project list
     org_domains = Domain.get_by_organization(org)
     if user.is_global_admin() or user.organization_manager.is_admin(user):
         current_domains = org_domains
@@ -65,25 +68,20 @@ def orgs_landing(request, org, template="orgs/orgs_landing.html", form=None, add
                 if (od and ud) and od.get_id == ud.get_id:
                     current_domains.append(od)
 
-
+    #create the list of existing domains that you can add to your organization
     domain_list_total = get_available_domains(request, org)
     domain_list_admin = list()
-
     domain_list_names = list()
     for domain in current_domains.all():
         domain_list_names.append(domain.name)
-
     if permission.edit_projects:
         for domain in domain_list_total:
             if user.is_domain_admin(domain[0]) and domain[0] not in domain_list_names:
                 domain_list_admin.append(domain)
     add_form = add_form or AddProjectForm(org,  role_choices=domain_list_admin)
 
-    org_names = user.organization_manager.get_items(user)
-    orgs = list()
-    for name in org_names:
-        orgs.append(Organization.get_by_name(name))
-
+    #the list of organizations that you are a member of
+    orgs = get_users_organizations(user)
 
     vals = dict( org=organization, domains=current_domains, reg_form=reg_form,
                  add_form=add_form, reg_form_empty=reg_form_empty, add_form_empty=add_form_empty, update_form=update_form,
@@ -109,12 +107,18 @@ def get_available_domains(request, org):
 def orgs_members(request, org, template='orgs/orgs_members.html', add_member_form=None):
     organization = Organization.get_by_name(org)
     couch_user = request.couch_user
+
+    #get the role of each member
     members = [WebUser.get_by_user_id(user_id) for user_id in organization.members]
     roles = list()
     for member in members:
         roles.append([member, member.organization_manager.role_label(member, org)])
+
+    #get the possible organization roles that can be assigned to members
     user_roles = [AdminOrganizationUserRole(subject=org)]
     user_roles.extend(sorted(OrganizationUserRole.by_subject(org), key=lambda role: role.name if role.name else u'\uFFFF'))
+
+    #teams, domains, current user
     current_teams = Team.get_by_org(org)
     current_domains = Domain.get_by_organization(org)
     username = request.user.username
@@ -122,15 +126,17 @@ def orgs_members(request, org, template='orgs/orgs_members.html', add_member_for
 
     membership, permission = get_membership_and_permission(user, org)
 
+    #get the possible organization roles that can be assigned to members and refactor them up for display / use
+    user_roles = [AdminOrganizationUserRole(subject=org)]
+    user_roles.extend(sorted(OrganizationUserRole.by_subject(org), key=lambda role: role.name if role.name else u'\uFFFF'))
     roles_list = []
     for user_role in user_roles:
         roles_list.append([user_role, user_role.get_qualified_id().replace(':', '_')])
 
-    org_names = user.organization_manager.get_items(user)
-    orgs = list()
-    for name in org_names:
-        orgs.append(Organization.get_by_name(name))
+    #the list of organizations that you are a member of
+    orgs = get_users_organizations(user)
 
+    #create form for adding a new member to the organization
     add_member_form_empty = not add_member_form
     role_choices = org_role_choices(org)
     add_member_form = add_member_form or AddMemberForm(org, role_choices=role_choices)
@@ -165,7 +171,6 @@ def orgs_new_project(request, org):
     else:
         return orgs_landing(request, org, form=DomainRegistrationForm())
 
-
 @require_org_member
 @require_org_project_manager
 def orgs_remove_domain(request, org, domain):
@@ -178,8 +183,6 @@ def orgs_remove_domain(request, org, domain):
     domain_obj.save()
     messages.success(request, "Project Removed!")
     return HttpResponseRedirect(reverse('orgs_landing', args=(org,)))
-
-
 
 @require_org_member
 @require_org_admin
@@ -197,7 +200,6 @@ def orgs_update_info(request, org):
                 organization.url = form.cleaned_data['url']
             if form.cleaned_data['location'] or organization.location:
                 organization.location = form.cleaned_data['location']
-                #logo not working, need to look into this
             if form.cleaned_data['logo']:
                 logo = form.cleaned_data['logo']
                 if organization.logo_filename:
@@ -214,7 +216,6 @@ def orgs_update_info(request, org):
         else:
             return orgs_landing(request, org, update_form=form)
     return HttpResponseRedirect(reverse('orgs_landing', args=[org]))
-
 
 @require_org_member
 @require_org_project_manager
@@ -237,13 +238,12 @@ def orgs_add_project(request, org):
 @require_org_member
 @require_org_admin
 def orgs_add_member(request, org, team_id=None):
+    #this method will redirect to landing, members, or teams page depending on where the user is adding a new member
     if request.method == "POST":
         role_choices = OrganizationUserRole.role_choices(org)
         form = AddMemberForm(org, request.POST, role_choices=role_choices)
         if form.is_valid():
             data = form.cleaned_data
-            #            username = form.cleaned_data['email']
-#            role_id = form.cleaned_data['role']
             #create invitation here, write email message, return to page
             data["invited_by"] = request.couch_user.user_id
             data["invited_on"] = datetime.utcnow()
@@ -254,7 +254,6 @@ def orgs_add_member(request, org, team_id=None):
             invite.save()
             invite.send_activation_email()
             messages.success(request, "Invitation sent to %s" % invite.email)
-            user = CouchUser.get_by_username(request.user.username)
         else:
             messages.error(request, "Unable to add member")
             if 'redirect_url' in request.POST:
@@ -275,20 +274,17 @@ def orgs_add_member(request, org, team_id=None):
 def orgs_remove_member(request, org, member_id):
     organization = Organization.get_by_name(org)
     member = WebUser.get(member_id)
-    #remove in members
     organization.members.remove(member_id)
-    #remove the membership
     member.organization_manager.delete_membership(member, org)
     member.save()
 
-
+    #remove member from any teams he is on
     org_teams = Team.get_by_org(org)
     for team_name, team_id in member.teams:
         team = Team.get(team_id)
         for org_team in org_teams:
             if team.get_id in org_team.get_id:
                 team.remove_member(member_id)
-
 
     organization.save()
     return HttpResponseRedirect(reverse('orgs_members', args=[org]))
@@ -334,6 +330,7 @@ def orgs_team_members(request, org, team_id, add_member_form=None, template="org
     teams = Team.get_by_org(org)
     current_domains = Domain.get_by_organization(org)
 
+    #adding a new member form
     add_member_form_empty = not add_member_form
     role_choices = org_role_choices(org)
     add_member_form = add_member_form or AddMemberForm(org, role_choices=role_choices)
@@ -344,12 +341,11 @@ def orgs_team_members(request, org, team_id, add_member_form=None, template="org
         raise Http404("Group %s does not exist" % team_id)
 
     #inspect the members of the team
-
     member_ids = team.get_member_ids()
     members = WebUser.view("_all_docs", keys=member_ids, include_docs=True).all()
     members.sort(key=lambda user: user.username)
 
-    #inspect the domains of the team
+    #inspect the domains of the team and get the possible roles for each one
     domain_names = team.get_domains()
     domains = list()
     for name in domain_names:
@@ -360,24 +356,22 @@ def orgs_team_members(request, org, team_id, add_member_form=None, template="org
             roles.append([user_role, user_role.get_qualified_id().replace(':', '_')])
         domains.append([Domain.get_by_name(name), team.role_label(item=name), roles])
 
-
+    #get the organization domains not in the team
     all_org_domains = Domain.get_by_organization(org)
     non_domains = [domain for domain in all_org_domains if domain.name not in domain_names]
 
+    #get the organization members not in the team
     all_org_member_ids = organization.members
     all_org_members = WebUser.view("_all_docs", keys=all_org_member_ids, include_docs=True).all()
     non_members = [member for member in all_org_members if member.user_id not in member_ids]
 
+    #user, membership and permission
     username = request.user.username
     user = WebUser.get_by_username(username)
-
     membership, permission = get_membership_and_permission(user, org)
 
-    org_names = user.organization_manager.get_items(user)
-    orgs = list()
-    for name in org_names:
-        orgs.append(Organization.get_by_name(name))
-
+    #the list of organizations that you are a member of
+    orgs = get_users_organizations(user)
 
     vals = dict(orgs=orgs, org=organization, team=team, teams=teams, members=members, nonmembers=non_members,
         domains=current_domains, team_domains=domains, team_nondomains=non_domains, permission=permission,
@@ -393,7 +387,6 @@ def add_team(request, org):
         team = Team(name=team_name, organization=org)
         team.save()
     return HttpResponseRedirect(reverse("orgs_team_members", args=(org, team.get_id)))
-
 
 @require_org_member
 @require_org_team_manager
@@ -503,7 +496,6 @@ def remove_all_from_team(request, org, team_id):
         return HttpResponseRedirect(reverse(request.POST['redirect_url'], args=(org, team_id)))
 
 def swap(list, index1, index2):
-    #swap to make member default
     temp = list[index2]
     list[index2] = list[index1]
     list[index1] = temp
@@ -511,6 +503,7 @@ def swap(list, index1, index2):
 
 def org_role_choices(org):
     role_choices = OrganizationUserRole.role_choices(org)
+    #swap to make member default
     swap(role_choices, 0, 3)
     swap(role_choices, 1, 2)
     return role_choices
@@ -522,3 +515,10 @@ def get_membership_and_permission(user, org):
     else:
         permission = OrganizationUserRole.get_default()
     return membership, permission
+
+def get_users_organizations(user):
+    org_names = user.organization_manager.get_items(user)
+    orgs = list()
+    for name in org_names:
+        orgs.append(Organization.get_by_name(name))
+    return orgs

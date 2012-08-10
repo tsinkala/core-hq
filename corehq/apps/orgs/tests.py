@@ -26,9 +26,6 @@ class OrganizationsTest(TestCase):
         self.team = Team(name='team', organization='mockorganization123')
         self.team.save()
 
-
-
-
     def tearDown(self):
         self.couch_user.delete()
         self.organization.delete()
@@ -46,24 +43,12 @@ class OrganizationsTest(TestCase):
         assert self.couch_user.organization_memberships == []
         self.couch_user.save()
 
-
     def testMembershipMigration(self):
         self.domain_membership_json = {u'doc_type': u'DomainMembership', u'domain': u'mockdomain', u'last_login': None, u'role_id': u'ed77b6f64d251e2aa023593044df90fa', u'is_admin': False, u'override_global_tz': False, u'timezone': u'UTC', u'date_joined': None, u'subject': None}
         self.domain_membership = DomainMembership.wrap(self.domain_membership_json)
-
         assert self.domain_membership.to_json() == {u'doc_type': u'DomainMembership', u'domain': None, u'last_login': None, u'role_id': u'ed77b6f64d251e2aa023593044df90fa', u'is_admin': False, u'override_global_tz': False, u'timezone': u'UTC', u'date_joined': None, u'subject': u'mockdomain'}
 
-
+    #should probably write a test for testing all things team related
 #    def testTeamMemberships(self):
-#        self.team.add_member(self.couch_user._id)
-#        self.couch_user.teams.append([self.team.name, self.team.get_id])
-#        self.team.add_domain_membership(self.domain)
-#        self.team.save()
-#        self.team.set_role(self.domain, 'admin')
-#        self.team.save()
-#        import pdb
-#        pdb.set_trace()
-#        assert self.couch_user.get_role(item=self.domain).name[1] == 'Admin (' + self.domain + ')'
-
 
 
