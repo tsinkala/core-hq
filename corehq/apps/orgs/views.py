@@ -69,9 +69,13 @@ def orgs_landing(request, org, template="orgs/orgs_landing.html", form=None, add
     domain_list_total = get_available_domains(request, org)
     domain_list_admin = list()
 
+    domain_list_names = list()
+    for domain in current_domains.all():
+        domain_list_names.append(domain.name)
+
     if permission.edit_projects:
         for domain in domain_list_total:
-            if user.is_domain_admin(domain[0]):
+            if user.is_domain_admin(domain[0]) and domain[0] not in domain_list_names:
                 domain_list_admin.append(domain)
     add_form = add_form or AddProjectForm(org,  role_choices=domain_list_admin)
 
