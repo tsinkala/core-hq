@@ -249,8 +249,6 @@ def copy_snapshot_app(request, domain):
 @require_previewer # remove for production
 def copy_snapshot(request, domain):
     dom = Domain.get_by_name(domain)
-    import pdb
-    pdb.set_trace()
     if request.method == "POST" and dom.is_snapshot:
         args = {'domain_name': request.POST['new_project_name'], 'tos_confirmed': True}
         form = DomainRegistrationForm(args)
