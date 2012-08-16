@@ -21,8 +21,11 @@
             {{ project.title }}
             <small>by
                 {% if project.organization %}
-                {% if request.couch_user.couch_id in project.get_organization.members %}
-                <a href="{% url orgs_landing project.organization %}">{% endif %}{{ project.organization_doc.title }}</a>
+                    {% if request.couch_user.user_id in project.get_organization.members %}
+                        <a href="{% url orgs_landing project.organization %}">{{ project.organization_doc.title }}</a>
+                    {% else %}
+                        {{ project.organization_doc.title }}
+                    {% endif %}
                 {% else %}
                     {{ project.author }}
                 {% endif %}
