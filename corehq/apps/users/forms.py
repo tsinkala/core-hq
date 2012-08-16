@@ -109,6 +109,12 @@ class CommCareAccountForm(forms.Form):
     
     class Meta:
         app_label = 'users'
+
+    def clean_username(self):
+        username = self.cleaned_data['username']
+        if username == 'admin' or username == 'demo_user':
+            raise forms.ValidationError("The username %s is reserved for CommCare." % username)
+        return username
     
     def clean(self):
         try:

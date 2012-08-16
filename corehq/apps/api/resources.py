@@ -131,16 +131,16 @@ class CommCareCaseResource(Resource):
         resource_name = 'case'
 
 class XFormInstanceResource(Resource):
-    type = "xform"
+    type = "form"
     id = fields.CharField(attribute='get_id', readonly=True, unique=True)
 
-    form = fields.CharField(attribute='get_form')
+    form = fields.DictField(attribute='get_form')
     type = fields.CharField(attribute='type')
     version = fields.CharField(attribute='version')
     uiversion = fields.CharField(attribute='uiversion')
     metadata = fields.DictField(attribute='metadata')
     md5 = fields.CharField(attribute='xml_md5')
-    top_level_tags = fields.CharField(attribute='top_level_tags')
+#    top_level_tags = fields.DictField(attribute='top_level_tags') # seems redundant
 
     #properties = fields.ListField()
 
@@ -157,4 +157,4 @@ class XFormInstanceResource(Resource):
         return form
 
     class Meta(CustomResourceMeta):
-        resource_name = 'xform'
+        resource_name = 'form'

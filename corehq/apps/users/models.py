@@ -6,8 +6,8 @@ from __future__ import absolute_import
 from datetime import datetime
 import functools
 import logging
-from http_parser.http import NoMoreData
 import re
+from restkit.errors import NoMoreData
 from dimagi.utils.decorators.memoized import memoized
 from dimagi.utils.make_uuid import random_hex
 from dimagi.utils.modules import to_function
@@ -427,6 +427,9 @@ class DomainMembership(Membership):
 
     @classmethod
     def wrap(cls, data):
+        if data.get('subject'):
+            data['domain'] = data['subject']
+            del data['subject']
         # Do a just-in-time conversion of old permissions
         if data.get('domain'):
             data['subject'] = data['domain']

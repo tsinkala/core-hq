@@ -1,13 +1,15 @@
 from datetime import datetime
+import logging
 from django.core.urlresolvers import reverse
 from django.http import Http404, HttpResponseRedirect, HttpResponse
+from restkit.errors import RequestFailed
 from corehq.apps.appstore.forms import AddReviewForm
 from corehq.apps.appstore.models import Review
 from corehq.apps.domain.decorators import require_previewer, login_and_domain_required
 from corehq.apps.registration.forms import DomainRegistrationForm
 from corehq.apps.reports.dispatcher import ReportDispatcher
 from corehq.apps.users.decorators import require_permission
-from corehq.apps.users.models import DomainPermissions
+from dimagi.utils.logging import notify_exception
 from dimagi.utils.web import render_to_response, json_response, get_url_base
 from corehq.apps.orgs.models import Organization
 from corehq.apps.domain.models import Domain, LICENSES
@@ -21,8 +23,8 @@ from django.shortcuts import redirect
 
 PER_PAGE = 9
 
-def redirect(request, path):
-    return HttpResponseRedirect('/exchange' + path)
+def rewrite_url(request, path):
+    return HttpResponseRedirect('/exchange%s?%s' % (path, request.META['QUERY_STRING']))
 
 def _appstore_context(context={}):
     context['sortables'] = [
@@ -140,20 +142,27 @@ def project_info(request, domain, template="appstore/project_info.html"):
     return render_to_response(request, template, vals)
 
 @require_previewer # remove for production
-def search_snapshots(request, filter_by = '', filter = '', template="appstore/appstore_base.html"):
+def search_snapshots(request, filter_by='', filter='', template="appstore/appstore_base.html"):
     page = int(request.GET.get('page', 1))
+    q = request.GET.get('q', '')
     if filter_by != '':
-        query = "%s:%s %s" % (filter_by, filter, request.GET['q'])
+        query = "%s:%s %s" % (filter_by, filter, q)
     else:
-        query = request.GET['q']
+        query = q
 
     if query == '':
         return redirect('appstore')
 
-    snapshots, total_rows = Domain.snapshot_search(query, page=page, per_page=PER_PAGE)
-    more_pages = page * PER_PAGE < total_rows
-    vals = dict(apps=snapshots, search_query=query, page=page, prev_page=(page-1), next_page=(page+1), more_pages=more_pages)
-    return render_to_response(request, template, _appstore_context(vals))
+    try:
+        snapshots, total_rows = Domain.snapshot_search(query, page=page, per_page=PER_PAGE)
+    except RequestFailed:
+        notify_exception("Domain snapshot_search RequestFailed")
+        messages.error(request, "Oops! Our search backend is experiencing problems. Please try again later.")
+        return redirect('appstore')
+    else:
+        more_pages = page * PER_PAGE < total_rows
+        vals = dict(apps=snapshots, search_query=query, page=page, prev_page=(page-1), next_page=(page+1), more_pages=more_pages)
+        return render_to_response(request, template, _appstore_context(vals))
 
 FILTERS = {'category': 'project_type', 'license': 'license', 'region': 'region', 'author': 'author'}
 

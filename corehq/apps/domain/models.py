@@ -1,10 +1,12 @@
 from datetime import datetime, timedelta
+import json
 import logging
 from couchdbkit.exceptions import ResourceConflict
 from django.conf import settings
 from django.db import models
 from couchdbkit.ext.django.schema import Document, StringProperty,\
-    BooleanProperty, DateTimeProperty, IntegerProperty, DocumentSchema, SchemaProperty, DictProperty
+    BooleanProperty, DateTimeProperty, IntegerProperty, DocumentSchema, SchemaProperty, DictProperty, ListProperty
+from django.utils.safestring import mark_safe
 from corehq.apps.appstore.models import Review
 from corehq.apps.orgs.models import Organization
 from dimagi.utils.timezones import fields as tz_fields
@@ -58,7 +60,60 @@ def cached_property(method):
             return self.cached_properties[method.__name__]
     return find_cached
 
-class Domain(Document):
+class HQBillingAddress(DocumentSchema):
+    """
+        A billing address for clients
+    """
+    country = StringProperty()
+    postal_code = StringProperty()
+    state_province = StringProperty()
+    city = StringProperty()
+    address = ListProperty()
+    name = StringProperty()
+
+    @property
+    def html_address(self):
+        template = """<address>
+            <strong>%(name)s</strong><br />
+            %(address)s<br />
+            %(city)s%(state)s %(postal_code)s<br />
+            %(country)s
+        </address>"""
+        filtered_address = [a for a in self.address if a]
+        address = template % dict(
+            name=self.name,
+            address="<br />\n".join(filtered_address),
+            city=self.city,
+            state=", %s" % self.state_province if self.state_province else "",
+            postal_code=self.postal_code,
+            country=self.country
+        )
+        return mark_safe(address)
+
+    def update_billing_address(self, **kwargs):
+        self.country = kwargs.get('country','')
+        self.postal_code = kwargs.get('postal_code','')
+        self.state_province = kwargs.get('state_province', '')
+        self.city = kwargs.get('city', '')
+        self.address = kwargs.get('address', [''])
+        self.name = kwargs.get('name', '')
+
+
+class HQBillingDomainMixin(DocumentSchema):
+    """
+        This contains all the attributes required to bill a client for CommCare HQ services.
+    """
+    billing_address = SchemaProperty(HQBillingAddress)
+    billing_number = StringProperty()
+    currency_code = StringProperty(default=settings.DEFAULT_CURRENCY)
+
+    def update_billing_info(self, **kwargs):
+        self.billing_number = kwargs.get('phone_number','')
+        self.billing_address.update_billing_address(**kwargs)
+        self.currency_code = kwargs.get('currency_code', settings.DEFAULT_CURRENCY)
+
+
+class Domain(Document, HQBillingDomainMixin):
     """Domain is the highest level collection of people/stuff
        in the system.  Pretty much everything happens at the
        domain-level, including user membership, permission to
@@ -294,14 +349,16 @@ class Domain(Document):
 
     def password_format(self):
         """
-        If a single application is alphanumeric, return alphanumeric; otherwise, return numeric
+        This was a performance hit, so for now we'll just return 'a' no matter what
+#        If a single application is alphanumeric, return alphanumeric; otherwise, return numeric
         """
-        for app in self.full_applications():
-            if hasattr(app, 'profile'):
-                format = app.profile.get('properties', {}).get('password_format', 'n')
-                if format == 'a':
-                    return 'a'
-        return 'n'
+#        for app in self.full_applications():
+#            if hasattr(app, 'profile'):
+#                format = app.profile.get('properties', {}).get('password_format', 'n')
+#                if format == 'a':
+#                    return 'a'
+#        return 'n'
+        return 'a'
 
     @classmethod
     def get_all(cls):
@@ -444,7 +501,7 @@ class Domain(Document):
         if page:
             skip = (page - 1) * per_page
             limit = per_page
-        results = get_db().search('domain/snapshot_search', q=query, limit=limit, skip=skip)
+        results = get_db().search('domain/snapshot_search', q=json.dumps(query), limit=limit, skip=skip)
         return map(cls.get, [r['id'] for r in results]), results.total_rows
 
     def organization_doc(self):
@@ -506,6 +563,8 @@ class Domain(Document):
 
         total_average_sum = sum(avg for domain, avg, num in domains)
         total_average_count = len(domains)
+        if not total_average_count:
+            return []
         total_average = (total_average_sum / total_average_count)
 
         for domain, average_rating, num_ratings in domains:
@@ -592,3 +651,4 @@ class OldDomain(models.Model):
         
     def __unicode__(self):
         return self.name
+
