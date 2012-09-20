@@ -1047,7 +1047,6 @@ class ApplicationBase(VersionedDoc):
                 # e.g. 2011-Apr-11 20:45
                 'Released-on': built_on.strftime("%Y-%b-%d %H:%M"),
                 'CommCare-Release': "true",
-                'Build-Number': self.version,
             })
             if save:
                 self.built_on = built_on
