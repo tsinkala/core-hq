@@ -8,7 +8,7 @@ from django.shortcuts import redirect
 
 from corehq.apps.domain.decorators import REDIRECT_FIELD_NAME, login_required_late_eval_of_LOGIN_URL, login_and_domain_required, domain_admin_required, require_previewer
 from corehq.apps.domain.forms import DomainSelectionForm, DomainGlobalSettingsForm,\
-    DomainMetadataForm, SnapshotSettingsForm, SnapshotApplicationForm
+    DomainMetadataForm, SnapshotSettingsForm, SnapshotApplicationForm, OrgSnapshotSettingsForm
 from corehq.apps.domain.models import Domain, LICENSES
 from corehq.apps.domain.utils import get_domained_url, normalize_domain_name
 
@@ -23,7 +23,6 @@ from dimagi.utils.post import simple_post
 from corehq.apps.app_manager.models import get_app
 import cStringIO
 from PIL import Image
-
 
 # Domain not required here - we could be selecting it for the first time. See notes domain.decorators
 # about why we need this custom login_required decorator
@@ -77,8 +76,6 @@ class UserTable(tables.Table):
     is_domain_admin = tables.Column(verbose_name="Domain admin")
     last_login = tables.Column(verbose_name="Most recent login")
     invite_status = tables.Column(verbose_name="Invite status")
-
-########################################################################################################
 
 ########################################################################################################
 
@@ -284,7 +281,11 @@ def create_snapshot(request, domain):
     domain = Domain.get_by_name(domain)
     #latest_applications = [app.get_latest_saved() or app for app in domain.applications()]
     if request.method == 'GET':
-        form = SnapshotSettingsForm(initial={
+        if domain.organization:
+            FormCls = SnapshotSettingsForm
+        else:
+            FormCls = OrgSnapshotSettingsForm
+        form = FormCls(initial={
                 'default_timezone': domain.default_timezone,
                 'case_sharing': json.dumps(domain.case_sharing),
                 'city': domain.city,
@@ -297,7 +298,7 @@ def create_snapshot(request, domain):
         published_snapshot = domain.published_snapshot() or domain
         published_apps = {}
         if published_snapshot is not None:
-            form = SnapshotSettingsForm(initial={
+            form = FormCls(initial={
                 'default_timezone': published_snapshot.default_timezone,
                 'case_sharing': json.dumps(published_snapshot.case_sharing),
                 'city': published_snapshot.city,
@@ -341,7 +342,10 @@ def create_snapshot(request, domain):
              'app_forms': app_forms,
              'autocomplete_fields': ('project_type', 'phone_model', 'user_type', 'city', 'country', 'region')})
     elif request.method == 'POST':
-        form = SnapshotSettingsForm(request.POST, request.FILES)
+        if domain.organization:
+            form = OrgSnapshotSettingsForm(request.POST, request.FILES)
+        else:
+            form = SnapshotSettingsForm(request.POST, request.FILES)
         app_forms = []
         publishing_apps = False
         for app in domain.applications():
@@ -382,7 +386,8 @@ def create_snapshot(request, domain):
         new_domain.city = request.POST['city']
         new_domain.country = request.POST['country']
         new_domain.title = request.POST['title']
-        new_domain.author = request.POST['author']
+        if not domain.organization:
+            new_domain.author = request.POST['author']
         for snapshot in domain.snapshots():
             if snapshot.published and snapshot._id != new_domain._id:
                 snapshot.published = False

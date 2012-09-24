@@ -49,14 +49,15 @@ class OrganizationRegistrationForm(forms.Form):
     form for creating an organization for the first time
     """
 
-    org_name = forms.CharField(label='Organization ID:', max_length=25, help_text='i.e. - worldbank')
-    org_title = forms.CharField(label='Organization Title:', max_length=25, help_text='i.e. - The World Bank')
+
+    org_name = forms.CharField(label='* Organization ID:', max_length=25, help_text='i.e. - worldbank')
+    org_title = forms.CharField(label='* Organization Title:', max_length=25, help_text='i.e. - The World Bank')
     email = forms.CharField(label='Organization Email:', max_length=35, required=False)
     url = forms.CharField(label='Organization Homepage:', max_length=35, required=False)
     location = forms.CharField(label='Organization Location:', max_length=25, required=False)
     logo = forms.ImageField(label='Organization Logo:', required=False)
 
-    tos_confirmed = forms.BooleanField(required=False, label="Terms of Service") # Must be set to False to have the clean_*() routine called
+    tos_confirmed = forms.BooleanField(required=False, label="* Terms of Service") # Must be set to False to have the clean_*() routine called
 
     def clean_org_name(self):
         data = self.cleaned_data['org_name'].strip().lower()
@@ -68,8 +69,6 @@ class OrganizationRegistrationForm(forms.Form):
 
     def clean_org_title(self):
         data = self.cleaned_data['org_title'].strip()
-        if not re.match("^%s$" % new_org_title_re, data) and not data == '':
-            raise forms.ValidationError('Only letters and numbers allowed. Single spaces may be used to separate words.')
         return data
 
     def clean_email(self):

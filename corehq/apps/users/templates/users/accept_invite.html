@@ -1,10 +1,10 @@
 {% extends login_template %}
-{% block title %}Domain Selection{% endblock title %}
+{% block title %}{% if domain %}Domain {% else %}Organization {% endif %}Selection{% endblock title %}
 {% block login-content %}
     <div class="row">
         {% if request.user.is_authenticated %}
             <div class="page-header">
-                <h1>Project Invitation <small>You've been invited to join "{{ domain }}".</small></h1>
+                <h1>Project Invitation <small>You've been invited to join "{{ domain }}{{ organization }}".</small></h1>
             </div>
             <div class="span8">
                 <form name="form" method="post" action="" class="form-horizontal">
@@ -12,7 +12,7 @@
                     {{ form.as_table }}
                     <fieldset>
                         <legend>Accept Invite?</legend>
-                        <p>{% if invited_user %}<strong>Note:</strong> You are signed in with an email different from the invited email, {{ invited_user }}. Are you sure you want{% else %}Would you like{% endif %} to accept the invitation to join the CommCare HQ project <strong>{{ domain }}</strong> as <strong>{{ user.username }}</strong>?</p>
+                        <p>{% if invited_user %}<strong>Note:</strong> You are signed in with an email different from the invited email, {{ invited_user }}. Are you sure you want{% else %}Would you like{% endif %} to accept the invitation to join the CommCare HQ {% if domain %}project <strong>{{ domain }}</strong> {% else %}organization <strong>{{ organization }}</strong> {% endif %} as <strong>{{ user.username }}</strong>?</p>
                     </fieldset>
                     <button type="submit" class="btn btn-primary btn-large">Accept Invitation</button>
                 </form>

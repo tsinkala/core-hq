@@ -32,19 +32,10 @@
 </script>
 {% endblock %}
 
-{% block page-title %}
-<ul class="breadcrumb">
-    <li>
-        <strong>Organizations</strong> <span class="divider">&gt;</span>
-    </li>
-    <li>
-
-        <a href="{% url orgs_landing org.name %}">{{ org.name }} ({{ org.title }})</a>
-    </li>
+{% block breadcrumb %}
     <li>
         <span class="divider">&gt;</span><a href="#">Editing Team "{{ team.name }}"</a>
     </li>
-</ul>
 {% endblock %}
 
 {% block team-header %}
@@ -76,7 +67,7 @@
 {% endblock %}
 
 {% block team-view %}
-<div class="container"><h2>Manage Team Members</h2><br/>
+<h2>Manage Team Members</h2><br/>
 <div class="row-fluid">
     <div class="span6" id="members">
         <h3>Organization Members in Team
@@ -112,12 +103,12 @@
                 <button type="submit" class="btn btn-success"><i class="icon icon-white icon-plus"></i> {{ nonmember.raw_username }}</button>
             </form>
             {% endfor %}
+            {% if membership.is_admin %}<a href="#add_member_modal" id="add_member_to_org_and_team_btn" class="btn btn-success" data-toggle="modal" style="vertical-align: top; margin-top: 4px;"><i class="icon-plus icon-white"></i> other</a>{% endif %}
         </div>
     </div>
 </div>
     <hr/>
-</div>
-<div class="container"><h2>Manage Team Projects</h2><br/>
+<h2>Manage Team Projects</h2><br/>
 <div class="row-fluid">
     <div class="span6" id="domains">
         <h3>Team Projects
@@ -125,7 +116,7 @@
             <!--<button class="btn btn-danger" type="submit">Remove All</button>-->
         <!--</form>--></h3><br/>
         <div class="well">
-            {% for domain, role in team_domains %}
+            {% for domain, role, roles in team_domains %}
             <form class="group-bubble" name="remove_domain" action="{% url remove_domain_from_team org.name team.get_id domain.name %}" method="post">
                 <input type="hidden" name="redirect_url" value="orgs_team_members" />
                 <div class="btn-toolbar">
@@ -135,10 +126,9 @@
                         <span class="caret"></span>
                     </a>
                     <ul class="dropdown-menu">
-                        <li><a href="{% url set_team_permission_for_domain org.name team.get_id domain.name 'admin' %}">Admin</a></li>
-                        <li><a href="{% url set_team_permission_for_domain org.name team.get_id domain.name 'edit-apps' %}">App Editor</a></li>
-                        <li><a href="{% url set_team_permission_for_domain org.name team.get_id domain.name 'field-implementer' %}">Field Implementer</a></li>
-                        <li><a href="{% url set_team_permission_for_domain org.name team.get_id domain.name 'read-only' %}">Read Only</a></li>
+                        {% for user_role, role_id in roles %}
+                        <li><a href="{% url set_team_permission_for_domain org.name team.get_id domain.name role_id %}">{{ user_role.name }}</a></li>
+                        {% endfor %}
                     </ul>
                 </div>
                 </div>
@@ -162,6 +152,16 @@
         </div>
     </div>
 </div>
-</div>
 {% endblock %}
 
+{% block add_member_redirect_url %}
+<input type="hidden" name="redirect_url" value="orgs_team_members" />
+{% endblock %}
+
+{% block add_member_action %}
+<form class="form-horizontal" method="post" action="{% url orgs_add_member org.name team.get_id %}">
+{% endblock %}
+
+{% block team_label %}
+and team {{ team.name }}
+{% endblock %}

@@ -80,6 +80,8 @@ class RoleForm(forms.Form):
         super(RoleForm, self).__init__(*args, **kwargs)
         self.fields['role'].choices = role_choices
 
+
+
 class UserForm(RoleForm):
     """
     Form for Users

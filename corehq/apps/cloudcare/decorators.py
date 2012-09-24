@@ -1,4 +1,4 @@
-from corehq.apps.users.models import Permissions
+from corehq.apps.users.models import DomainPermissions
 from corehq.apps.domain.decorators import login_and_domain_required
 from django.http import HttpResponseForbidden
 from corehq.apps.users.decorators import require_permission
@@ -12,7 +12,7 @@ def require_cloudcare_access_ex():
         def _inner(request, domain, *args, **kwargs):
             if hasattr(request, "couch_user"):
                 if request.couch_user.is_web_user():
-                    return require_permission(Permissions.edit_data)(view_func)(request, domain, *args, **kwargs)
+                    return require_permission(DomainPermissions.edit_data)(view_func)(request, domain, *args, **kwargs)
                 else:
                     assert request.couch_user.is_commcare_user(), \
                         "user was neither a web user or a commcare user!"

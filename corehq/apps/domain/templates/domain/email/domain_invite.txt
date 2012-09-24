@@ -1,6 +1,6 @@
 Hi!
 
-{{ inviter }} has invited you to join the {{ domain }} domain at CommCareHQ.
+{{ inviter }} has invited you to join the {% if domain %}{{ domain }} project {% else %}{{ organization }} organization {% endif %}at CommCareHQ.
 
 CommCareHQ is a tool that helps manage community health worker programs around the world.
 

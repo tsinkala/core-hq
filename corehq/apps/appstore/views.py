@@ -7,7 +7,7 @@ from corehq.apps.appstore.forms import AddReviewForm
 from corehq.apps.appstore.models import Review
 from corehq.apps.domain.decorators import require_previewer, login_and_domain_required
 from corehq.apps.registration.forms import DomainRegistrationForm
-from corehq.apps.users.models import Permissions
+from corehq.apps.reports.dispatcher import ReportDispatcher
 from dimagi.utils.logging import notify_exception
 from dimagi.utils.web import render_to_response, json_response, get_url_base
 from corehq.apps.orgs.models import Organization
@@ -155,7 +155,7 @@ def search_snapshots(request, filter_by='', filter='', template="appstore/appsto
     try:
         snapshots, total_rows = Domain.snapshot_search(query, page=page, per_page=PER_PAGE)
     except RequestFailed:
-        notify_exception(request, "Domain snapshot_search RequestFailed")
+        notify_exception("Domain snapshot_search RequestFailed")
         messages.error(request, "Oops! Our search backend is experiencing problems. Please try again later.")
         return redirect('appstore')
     else:

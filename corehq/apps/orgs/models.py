@@ -2,7 +2,7 @@ from couchdbkit.ext.django.schema import *
 import util
 from django import forms
 from django.db import models
-from corehq.apps.users.models import AuthorizableMixin, WebUser
+from django.conf import settings
 from dimagi.utils.couch.undo import UndoableDocument, DeleteDocRecord
 
 
@@ -16,8 +16,11 @@ class Organization(Document):
     location = StringProperty()
     logo_filename = StringProperty()
 
+    date_created = DateTimeProperty()
+    is_active = BooleanProperty()
 
     members = StringListProperty()
+    default_timezone = StringProperty(default=getattr(settings, "TIME_ZONE", "UTC"))
 
     @classmethod
     def get_by_name(cls, name):
@@ -36,7 +39,7 @@ class Organization(Document):
 
     def get_logo(self):
         if self.logo_filename:
-            return (self.fetch_attachment(self.logo_filename), self._attachments[self.logo_filename]['content_type'])
+            return self.fetch_attachment(self.logo_filename), self._attachments[self.logo_filename]['content_type']
         else:
             return None
 
@@ -49,19 +52,11 @@ class Organization(Document):
             self.save()
         return self.members
 
-
-class Team(UndoableDocument, AuthorizableMixin):
+from corehq.apps.users.models import DomainAuthorizableMixin
+class Team(UndoableDocument, DomainAuthorizableMixin):
     name = StringProperty()
     organization = StringProperty()
     member_ids = StringListProperty()
-
-#    def add_member(self, guid):
-#    #consistency check to make sure member is not already on the team
-#        if guid in self.members:
-#            return False
-#        self.members.append(guid)
-#        self.save()
-#        return self.members
 
     def add_member(self, couch_user_id):
         from corehq.apps.users.models import WebUser
@@ -90,6 +85,7 @@ class Team(UndoableDocument, AuthorizableMixin):
         return [user.user_id for user in self.get_members(is_active)]
 
     def get_members(self, is_active=True):
+        from corehq.apps.users.models import WebUser
         users = [WebUser.get_by_user_id(user_id) for user_id in self.member_ids]
         users = [user for user in users if not user.is_deleted()]
         if is_active is True:

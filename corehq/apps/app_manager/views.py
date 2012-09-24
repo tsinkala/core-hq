@@ -30,7 +30,7 @@ from corehq.apps.hqmedia import upload
 from corehq.apps.sms.views import get_sms_autocomplete_context
 from corehq.apps.translations.models import TranslationMixin
 from corehq.apps.users.decorators import require_permission
-from corehq.apps.users.models import Permissions, CommCareUser
+from corehq.apps.users.models import DomainPermissions, CommCareUser
 
 from dimagi.utils.web import render_to_response, json_response, json_request
 
@@ -72,7 +72,7 @@ except ImportError:
     logging.error("lxml not installed! apps won't work properly!!")
 from django.contrib import messages
 
-require_can_edit_apps = require_permission(Permissions.edit_apps)
+require_can_edit_apps = require_permission(DomainPermissions.edit_apps)
 
 def _encode_if_unicode(s):
     return s.encode('utf-8') if isinstance(s, unicode) else s
@@ -934,7 +934,7 @@ def _handle_media_edits(request, item, should_edit, resp):
 
 @require_POST
 @login_or_digest
-@require_permission(Permissions.edit_apps, login_decorator=None)
+@require_permission(DomainPermissions.edit_apps, login_decorator=None)
 def edit_form_attr(req, domain, app_id, unique_form_id, attr):
     """
     Called to edit any (supported) form attribute, given by attr

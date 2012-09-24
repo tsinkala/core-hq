@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from xml.sax.saxutils import escape
 from functools import wraps
 import json
-from corehq.apps.orgs.models import Team
+from corehq.apps.orgs.models import Team, Organization
 from corehq.apps.reports.util import get_possible_reports
 from openpyxl.shared.exc import InvalidFileException
 import re
@@ -37,7 +37,7 @@ from corehq.apps.sms.views import get_sms_autocomplete_context
 from corehq.apps.domain.models import Domain
 from corehq.apps.users.decorators import require_permission
 from corehq.apps.users.forms import UserForm, CommCareAccountForm, ProjectSettingsForm
-from corehq.apps.users.models import CouchUser, Invitation, CommCareUser, WebUser, RemoveWebUserRecord, UserRole, AdminUserRole
+from corehq.apps.users.models import CouchUser, Invitation, CommCareUser, WebUser, RemoveWebUserRecord, UserRole, AdminDomainUserRole, DomainUserRole
 from corehq.apps.groups.models import Group
 from corehq.apps.domain.decorators import login_and_domain_required, require_superuser, domain_admin_required
 from dimagi.utils.web import render_to_response, json_response, get_url_base
@@ -112,8 +112,8 @@ def users(request, domain):
 @require_can_edit_web_users
 def web_users(request, domain, template="users/web_users.html"):
     context = _users_context(request, domain)
-    user_roles = [AdminUserRole(domain=domain)]
-    user_roles.extend(sorted(UserRole.by_domain(domain), key=lambda role: role.name if role.name else u'\uFFFF'))
+    user_roles = [AdminDomainUserRole(subject=domain)]
+    user_roles.extend(sorted(DomainUserRole.by_subject(domain), key=lambda role: role.name if role.name else u'\uFFFF'))
 
     role_labels = {}
     for r in user_roles:
@@ -126,7 +126,7 @@ def web_users(request, domain, template="users/web_users.html"):
 
     context.update({
         'user_roles': user_roles,
-        'default_role': UserRole.get_default(),
+        'default_role': DomainUserRole.get_default(),
         'report_list': get_possible_reports(domain),
         'invitations': invitations
     })
@@ -137,11 +137,14 @@ def web_users(request, domain, template="users/web_users.html"):
 def remove_web_user(request, domain, couch_user_id):
     user = WebUser.get_by_user_id(couch_user_id, domain)
     record = user.delete_domain_membership(domain, create_record=True)
-    user.save()
-    messages.success(request, 'You have successfully removed {username} from your domain. <a href="{url}" class="post-link">Undo</a>'.format(
-            username=user.username,
-            url=reverse('undo_remove_web_user', args=[domain, record.get_id])
-        ), extra_tags="html")
+    if record == 'error':
+        messages.error(request, 'Unable to remove membership because user has team access')
+    else:
+        user.save()
+        messages.success(request, 'You have successfully removed {username} from your domain. <a href="{url}" class="post-link">Undo</a>'.format(
+                username=user.username,
+                url=reverse('undo_remove_web_user', args=[domain, record.get_id])
+            ), extra_tags="html")
     return HttpResponseRedirect(reverse('web_users', args=[domain]))
 
 @require_can_edit_web_users
@@ -160,69 +163,20 @@ def undo_remove_web_user(request, domain, record_id):
 @require_POST
 def post_user_role(request, domain):
     role_data = json.loads(request.raw_post_data)
-    role_data = dict([(p, role_data[p]) for p in set(UserRole.properties().keys() + ['_id', '_rev']) if p in role_data])
-    role = UserRole.wrap(role_data)
+    role_data = dict([(p, role_data[p]) for p in set(DomainUserRole.properties().keys() + ['_id', '_rev']) if p in role_data])
+    role = DomainUserRole.wrap(role_data)
     role.domain = domain
     if role.get_id:
-        old_role = UserRole.get(role.get_id)
-        assert(old_role.doc_type == UserRole.__name__)
+        old_role = UserRole.get(role.get_id) or DomainUserRole.get(role.get_id)
+        assert(old_role.doc_type == UserRole.__name__ or old_role.doc_type == DomainUserRole.__name__)
     role.save()
     return json_response(role)
 
-@transaction.commit_on_success
-def accept_invitation(request, domain, invitation_id):
-    if request.GET.get('switch') == 'true':
-        logout(request)
-        return redirect_to_login(request.path)
-    if request.GET.get('create') == 'true':
-        logout(request)
-        return HttpResponseRedirect(request.path)
-    invitation = Invitation.get(invitation_id)
-    assert(invitation.domain == domain)
-    if invitation.is_accepted:
-        messages.error(request, "Sorry that invitation has already been used up. "
-                       "If you feel this is a mistake please ask the inviter for "
-                       "another invitation.")
-        return HttpResponseRedirect(reverse("login"))
-    if request.user.is_authenticated():
-        # if you are already authenticated, just add the domain to your
-        # list of domains
-        if request.couch_user.username != invitation.email:
-            messages.error(request, "The invited user %s and your user %s do not match!" % (invitation.email, request.couch_user.username))
-
-        if request.method == "POST":
-            couch_user = CouchUser.from_django_user(request.user)
-            couch_user.add_domain_membership(domain=domain)
-            couch_user.set_role(domain, invitation.role)
-            couch_user.save()
-            invitation.is_accepted = True
-            invitation.save()
-            messages.success(request, "You have been added to the %s domain" % domain)
-            return HttpResponseRedirect(reverse("domain_homepage", args=[domain,]))
-        else:
-            return render_to_response(request, 'users/accept_invite.html', {'domain': domain,
-                                                                            "invited_user": invitation.email if request.couch_user.username != invitation.email else ""})
-    else:
-        # if you're not authenticated we need you to fill out your information
-        if request.method == "POST":
-            form = NewWebUserRegistrationForm(request.POST)
-            if form.is_valid():
-                user = activate_new_user(form, is_domain_admin=False, domain=invitation.domain)
-                user.set_role(domain, invitation.role)
-                user.save()
-                invitation.is_accepted = True
-                invitation.save()
-                messages.success(request, "User account for %s created! You may now login." % form.cleaned_data["email"])
-                return HttpResponseRedirect(reverse("login"))
-        else:
-            form = NewWebUserRegistrationForm(initial={'email': invitation.email})
-
-        return render_to_response(request, "users/accept_invite.html", {"form": form})
 
 
 @require_can_edit_web_users
 def invite_web_user(request, domain, template="users/invite_web_user.html"):
-    role_choices = UserRole.role_choices(domain)
+    role_choices = DomainUserRole.role_choices(domain)
     if request.method == "POST":
         form = AdminInvitesUserForm(request.POST,
             excluded_emails=[user.username for user in WebUser.by_domain(domain)],
@@ -537,10 +491,9 @@ def _handle_user_form(request, domain, couch_user=None):
         and request.couch_user.user_id != couch_user.user_id
 
     if couch_user.is_commcare_user():
-        role_choices = UserRole.commcareuser_role_choices(domain)
+        role_choices = DomainUserRole.commcareuser_role_choices(domain)
     else:
-        role_choices = UserRole.role_choices(domain)
-
+        role_choices = DomainUserRole.role_choices(domain)
     if request.method == "POST" and request.POST['form_type'] == "basic-info":
         form = UserForm(request.POST, role_choices=role_choices)
         if form.is_valid():

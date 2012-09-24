@@ -48,28 +48,16 @@
 
 {% endblock %}
 
-{% block page-title %}
-<ul class="breadcrumb">
-    <li>
-        <strong>Organizations</strong> <span class="divider">&gt;</span>
-    </li>
-    <li>
-
-        <a href="{% url orgs_landing org.name %}">{{ org.name }} ({{ org.title }})</a>
-    </li>
+{% block breadcrumb %}
     <li>
         <span class="divider">&gt;</span><a href="#">Teams</a>
     </li>
-</ul>
 {% endblock %}
 
-{% block modals %}
+{% block other_modals %}
         {% endblock %}
 
-{% block content %}
-        {% block sidebar %}
-        {% endblock %}
-{% block centered-content %}
+{% block main_column %}
 {% block team-info %}
 <div class="team-header">
 {% if teams %}
@@ -83,8 +71,9 @@
 {% block team-header %}
 {% endblock %}
 </div>
+
 <div class="tabbable tabs-left row-fluid">
-    <ul class="nav nav-tabs span2" style="padding-left: 15px;">
+    <ul class="nav nav-tabs span2">
         {% with team as this_team %}
         {% for team in teams %}
         <li {% if this_team.get_id == team.get_id %}class="active"{% endif %}>
@@ -99,12 +88,9 @@
     </div>
 </div>
 
-<div class="container">
-<form class="well form-inline" method="post" action="{% url add_team org.name %}" style="margin-left: 150px;">
+<form class="well form-inline" method="post" action="{% url add_team org.name %}">
     <input type="text" placeholder="Team Name" id="id_team_name" name="team_name" />
     <button class="btn btn-success" type="submit">Create Team</button>
 </form>
-</div>
-{% endblock %}
 {% endblock %}
 

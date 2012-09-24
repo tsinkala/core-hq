@@ -42,8 +42,8 @@ def request_new_domain(request, form, org, new_user=True):
         dom_req.activation_guid = uuid.uuid1().hex
 
     if org:
-        new_domain = Domain(slug=form.cleaned_data['domain_name'],
-                            is_active=False,
+        new_domain = Domain(name=org + ':' + form.cleaned_data['domain_name'],
+                            is_active=False, slug = form.cleaned_data['domain_name'],
                             date_created=datetime.utcnow(), organization=org)
     else:
         new_domain = Domain(name=form.cleaned_data['domain_name'],
@@ -66,7 +66,8 @@ def request_new_domain(request, form, org, new_user=True):
             current_user = WebUser()
             current_user.sync_from_django_user(request.user)
             current_user.save()
-        current_user.add_domain_membership(new_domain.name, is_admin=True)
+        current_user.add_domain_membership(new_domain.name)
+        current_user.set_role(new_domain.name, 'admin')
         current_user.save()
         dom_req.requesting_user_username = request.user.username
         dom_req.new_user_username = request.user.username
