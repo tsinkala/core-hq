@@ -75,6 +75,3 @@ class FormPreparationV2Test(TestCase):
         self.form.actions.close_case = FormAction()
         self.form.actions.close_case.condition.type = 'always'
         check_xml_line_by_line(self, CLOSE_CASE_SOURCE, self.form.render_xform())
-
-#    def test_normal_suite(self):
-#        self.module
