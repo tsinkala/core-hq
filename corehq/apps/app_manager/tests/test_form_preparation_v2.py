@@ -57,14 +57,18 @@ class FormPreparationV2Test(TestCase):
         self.form.actions.update_case.condition.type = 'always'
         check_xml_line_by_line(self, OPEN_UPDATE_CASE_SOURCE, self.form.render_xform())
 
-    def test_update_preload_case(self):
-        self.form.source = XFORM_SOURCE
+    def test_update_preload_case(self, TARGET=UPDATE_PRELOAD_CASE_SOURCE):
         self.form.requires = 'case'
         self.form.actions.update_case = UpdateCaseAction(update={'question1': '/data/question1'})
         self.form.actions.update_case.condition.type = 'always'
         self.form.actions.case_preload = PreloadAction(preload={'/data/question1': 'question1'})
         self.form.actions.case_preload.condition.type = 'always'
-        check_xml_line_by_line(self, UPDATE_PRELOAD_CASE_SOURCE, self.form.render_xform())
+        check_xml_line_by_line(self, TARGET, self.form.render_xform())
+
+    def test_task_mode_update_preload_case(self):
+        self.module.task_mode = True
+        self.test_update_preload_case(TASK_MODE_UPDATE_PRELOAD_CASE_SOURCE)
+        self.module.task_mode = False
 
     def test_close_case(self):
         self.form.requires = 'case'
@@ -72,3 +76,5 @@ class FormPreparationV2Test(TestCase):
         self.form.actions.close_case.condition.type = 'always'
         check_xml_line_by_line(self, CLOSE_CASE_SOURCE, self.form.render_xform())
 
+#    def test_normal_suite(self):
+#        self.module

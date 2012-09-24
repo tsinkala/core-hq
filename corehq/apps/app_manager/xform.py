@@ -40,6 +40,23 @@ def _make_elem(tag, attr=None):
     attr = attr or {}
     return ET.Element(tag.format(**namespaces), dict([(key.format(**namespaces), val) for key,val in attr.items()]))
 
+class XPath(unicode):
+    pass
+
+class CaseIDXPath(XPath):
+
+    def case(self):
+        return CaseXPath(u"instance('casedb')/casedb/case[@case_id=%s]" % self)
+
+class CaseXPath(XPath):
+    def parent_id(self):
+        return CaseIDXPath(u"%s/index/parent" % self)
+
+    def property(self, property):
+        return XPath(u'%s/%s' % (self, property))
+
+SESSION_CASE_ID = CaseIDXPath(u"instance('commcaresession')/session/data/case_id")
+
 class WrappedNode(object):
     def __init__(self, xml, namespaces=namespaces):
         if isinstance(xml, basestring):
@@ -631,6 +648,10 @@ class XForm(WrappedNode):
 
             case_block = make_case_block()
 
+            this_case_id = SESSION_CASE_ID
+            if form.get_module().task_mode:
+                this_case_id = this_case_id.case().parent_id()
+
             if 'open_case' in actions:
                 open_case_action = actions['open_case']
                 add_create_block(case_block, open_case_action, case_name=open_case_action.name_path, case_type=form.get_case_type())
@@ -639,7 +660,7 @@ class XForm(WrappedNode):
             else:
                 self.add_bind(
                     nodeset="case/@case_id",
-                    calculate="instance('commcaresession')/session/data/case_id",
+                    calculate=this_case_id,
                 )
 
             if 'update_case' in actions or extra_updates:
@@ -661,7 +682,7 @@ class XForm(WrappedNode):
                         property = 'case_name'
                     self.add_setvalue(
                         ref=nodeset,
-                        value="instance('casedb')/casedb/case[@case_id=instance('commcaresession')/session/data/case_id]/%s" % property,
+                        value=this_case_id.case().property(property),
                     )
             if needs_casedb_instance:
                 self.add_instance('casedb', src='jr://instance/casedb')

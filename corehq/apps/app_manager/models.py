@@ -623,6 +623,8 @@ class Module(IndexedSchema, NavMenuItemMediaMixin):
     case_list = SchemaProperty(CaseList)
     referral_list = SchemaProperty(CaseList)
 
+    task_mode = BooleanProperty(default=False)
+
     def rename_lang(self, old_lang, new_lang):
         _rename_key(self.name, old_lang, new_lang)
         for form in self.get_forms():
