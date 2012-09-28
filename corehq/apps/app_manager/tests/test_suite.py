@@ -10,3 +10,8 @@ class SuiteTest(TestCase, TestFileMixin):
 
     def test_normal_suite(self):
         check_xml_line_by_line(self, self.get_xml('normal-suite'), self.app.create_suite())
+
+#    def test_task_mode_suite(self):
+#        self.app.get_module(0).task_mode = True
+#        check_xml_line_by_line(self, self.get_xml('task-mode-suite'), self.app.create_suite())
+#        self.app.get_module(0).task_mode = False

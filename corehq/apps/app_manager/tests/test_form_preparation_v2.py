@@ -51,7 +51,7 @@ class FormPreparationV2Test(TestCase, TestFileMixin):
 
     def test_task_mode_update_preload_case(self):
         self.module.task_mode = True
-        self.test_update_preload_case(TASK_MODE_UPDATE_PRELOAD_CASE_SOURCE)
+        self.test_update_preload_case('task_mode_update_preload_case')
         self.module.task_mode = False
 
     def test_close_case(self):
