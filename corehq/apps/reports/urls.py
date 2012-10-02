@@ -75,6 +75,7 @@ urlpatterns = patterns('corehq.apps.reports.views',
     url(r'^phonelog/', include(phonelog_reports)),
 
     url(r'^custom/', include(custom_report_urls)),
+    # todo have dispatcher return this line
     url(ProjectReportDispatcher.pattern(), ProjectReportDispatcher.as_view(),
         name=ProjectReportDispatcher.name()
     )

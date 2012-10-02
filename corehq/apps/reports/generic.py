@@ -159,6 +159,7 @@ class GenericReportView(object):
         self.domain = state.get('domain')
         self.context = state.get('context', {})
 
+        # todo put HttpRequestParameters object in init with getstate/setstate self.cached_request ?
         class FakeHttpRequest(object):
             GET = {}
             META = {}
@@ -203,6 +204,7 @@ class GenericReportView(object):
     _domain_object = None
     @property
     def domain_object(self):
+        # todo use @memoized ... do i actually need _property ? (check)
         if self._domain_object is None and self.domain is not None:
             from corehq.apps.domain.models import Domain
             self._domain_object = Domain.get_by_name(self.domain)
@@ -293,11 +295,13 @@ class GenericReportView(object):
     _filter_classes = None
     @property
     def filter_classes(self):
+        # todo cleanup
         if self._filter_classes is None:
             filters = []
             fields = self.override_fields
             if not fields:
                 fields = self.fields
+
             for field in fields or []:
                 klass = to_function(field)
                 filters.append(klass(self.request, self.domain, self.timezone))
@@ -320,15 +324,17 @@ class GenericReportView(object):
             self._export_format = self.export_format_override or self.request.GET.get('format', Format.XLS)
         return self._export_format
 
-    _export_name = None
-    @property
-    def export_name(self):
-        """
-            Override this if you don't want <slug>.xls or <slug>.csv to be the tabular export filename.
-        """
-        if self._export_name is None:
-            self._export_name = self.slug
-        return self._export_name
+#    _export_name = None
+#    @property
+#    def export_name(self):
+#        """
+#            Name of the file.
+#            Override this if you don't want <slug>.xls or <slug>.csv to be the tabular export filename.
+#        """
+#        if self._export_name is None:
+#            self._export_name = self.slug
+#        return self._export_name
+    export_name = slug
 
     @property
     def default_report_url(self):
@@ -449,6 +455,8 @@ class GenericReportView(object):
         """
             Intention: This probably does not need to be overridden in general.
             Updates the context with filter information.
+            # todo pair filter_context with update_filter_context
+            # todo context -> _context
         """
         self.context.update(report_filters=[dict(
             field=f.render(),
@@ -494,6 +502,7 @@ class GenericReportView(object):
         self.context.update(self._validate_context_dict(self.report_context))
 
     def generate_cache_key(self, func_name):
+        # todo bring query string (sorted--> pay attention to multiple params like ufilter) and domain back into this
         return "%s:%s" % (self.__class__.__name__, func_name)
 
     @property

@@ -83,7 +83,7 @@ class ReportDispatcher(View):
         reports = self.get_reports(request, *args, **kwargs)
         for key, report_model_paths in reports.items():
             for model_path in report_model_paths:
-                report_class = to_function(model_path)
+                report_class = to_function(model_path) # todo store this reference in a singleton ?
                 if report_class.slug == current_slug:
                     report = report_class(request, *args, **kwargs)
                     if self.permissions_check(model_path, request, *args, **kwargs):
@@ -97,7 +97,8 @@ class ReportDispatcher(View):
 
     @classmethod
     def pattern(cls):
-        return r'^((?P<render_as>[(json)|(async)|(filters)|(export)|(static)|(clear_cache)]+)/)?(?P<report_slug>[\w_]+)/$'
+        # todo instead of specifying renderers here, just grab render_as value in dispatcher and call hasattr on the report
+        return r'^((?P<render_as>(json|async|filters|export|static|clear_cache))/)?(?P<report_slug>[\w_]+)/$'
 
     @classmethod
     def allowed_renderings(cls):
@@ -111,6 +112,7 @@ class ReportDispatcher(View):
 
     @classmethod
     def report_navigation_list(cls, context):
+        # todo use generator / django template here
         request = context.get('request')
         report_nav = list()
         dispatcher = cls()
