@@ -213,7 +213,9 @@ class FormSource(object):
         if source is None:
             app = form.get_app()
             filename = "%s.xml" % unique_id
-            if app._attachments and filename in app._attachments and app._attachments[filename]["length"] > 0:
+            if app._attachments and filename in app._attachments and isinstance(app._attachments[filename], basestring):
+                source = app._attachments[filename]
+            elif app._attachments and filename in app._attachments and app._attachments[filename]["length"] > 0:
                 source = form.get_app().fetch_attachment(filename)
             else:
                 source = ''
@@ -1285,8 +1287,9 @@ class Application(ApplicationBase, TranslationMixin, HQMediaMixin):
 #            get_url_base(),
 #            reverse('corehq.apps.app_manager.views.download_zipped_jar', args=[self.domain, self._id]),
 #        )
-    def fetch_xform(self, module_id, form_id):
-        form = self.get_module(module_id).get_form(form_id)
+    def fetch_xform(self, module_id=None, form_id=None, form=None):
+        if not form:
+            form = self.get_module(module_id).get_form(form_id)
         return form.validate_form().render_xform().encode('utf-8')
 
     def create_app_strings(self, lang, template='app_manager/app_strings.txt'):
@@ -1376,13 +1379,14 @@ class Application(ApplicationBase, TranslationMixin, HQMediaMixin):
             "profile.xml": self.create_profile(),
             "suite.xml": self.create_suite(),
         }
+
         if self.show_user_registration:
-            files["user_registration.xml"] = self.get_user_registration().validate_form().render_xform().encode('utf-8')
+            files["user_registration.xml"] = self.fetch_xform(form=self.get_user_registration())
         for lang in ['default'] + self.build_langs:
             files["%s/app_strings.txt" % lang] = self.create_app_strings(lang)
         for module in self.get_modules():
             for form in module.get_forms():
-                files["modules-%s/forms-%s.xml" % (module.id, form.id)] = self.fetch_xform(module.id, form.id)
+                files["modules-%s/forms-%s.xml" % (module.id, form.id)] = self.fetch_xform(form=form)
         return files
     get_modules = IndexedSchema.Getter('modules')
 
