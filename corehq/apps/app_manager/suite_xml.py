@@ -153,6 +153,12 @@ class DetailVariable(XmlObject):
 
     name = property(get_name, set_name)
 
+class DetailVariables(XmlObject):
+    ROOT_NAME = 'variables'
+
+    variables = NodeListField('*', DetailVariable)
+
+
 class Detail(IdNode):
     """
     <detail id="">
@@ -170,9 +176,13 @@ class Detail(IdNode):
     ROOT_NAME = 'detail'
 
     title = NodeField('title/text', Text)
-    variables = NodeListField('variables/*', DetailVariable)
+    variables_node = NodeField('variables', DetailVariables)
     fields = NodeListField('field', Field)
 
+    def add_variable(self, key, value):
+        if not self.variables_node:
+            self.variables_node = DetailVariables()
+        self.variables_node.node.append(DetailVariable(name=key, function=value).node)
 
 class Fixture(IdNode):
     ROOT_NAME = 'fixture'
@@ -283,6 +293,8 @@ class SuiteGenerator(object):
                             id=self.id_strings.detail(module, detail),
                             title=Text(locale_id=self.id_strings.detail_title_locale(module, detail))
                         )
+                        if module.task_mode:
+                            d.add_variable('parent_id', 'index/parent')
                         for column in detail_columns:
                             fields = get_column_generator(self.app, module, detail, column).fields
                             d.fields.extend(fields)

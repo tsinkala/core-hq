@@ -54,15 +54,19 @@ class FormattedDetailColumn(object):
         )
         if self.variables:
             for key, value in sorted(self.variables.items()):
-                template.text.xpath.variables.node.append(
-                    sx.XpathVariable(name=key, locale_id=value).node
+                template.text.xpath.variables.append(
+                    sx.XpathVariable(name=key, locale_id=value)
                 )
 
         return template
 
     @property
     def xpath(self):
-        return self.column.xpath
+        property = self.column.xpath
+        if self.module.task_mode:
+            return xform.CaseIDXPath('$parent_id').case().property(property)
+        else:
+            return property
 
     XPATH_FUNCTION = u"{xpath}"
 
