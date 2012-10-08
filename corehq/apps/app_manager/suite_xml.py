@@ -314,7 +314,7 @@ class SuiteGenerator(object):
             if column.format == 'filter':
                 filters.append("(%s)" % Filter(self.app, module, short_detail, column).filter_xpath)
         if filters:
-            xpath = '[%s]' % (' && '.join(filters))
+            xpath = '[%s]' % (' and '.join(filters))
         else:
             xpath = ''
         return xpath
