@@ -282,7 +282,7 @@
     </command>
     <instance id="casedb" src="jr://instance/casedb"/>
     <session>
-        <datum detail-confirm="m0_case_long" detail-select="m0_case_short" id="case_id" nodeset="instance('casedb')/casedb/case[@case_type='suite_test'][@status='open'][(instance('casedb')/casedb/case[@case_id=$parent_id]/filter = 'danny')]" value="./@case_id"/>
+        <datum detail-confirm="m0_case_long" detail-select="m0_case_short" id="case_id" nodeset="instance('casedb')/casedb/case[@case_type='suite_test'][@status='open'][(instance('casedb')/casedb/case[@case_id=current()/index/parent]/filter = 'danny')]" value="./@case_id"/>
     </session>
 </entry>
 <menu id="m0">
