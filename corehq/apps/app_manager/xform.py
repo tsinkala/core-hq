@@ -125,8 +125,9 @@ class XForm(WrappedNode):
     This is not a comprehensive API for xforms editing and parsing.
 
     """
-    def __init__(self, *args, **kwargs):
-        super(XForm, self).__init__(*args, **kwargs)
+    def __init__(self, xml, delegation_mode, *args, **kwargs):
+        super(XForm, self).__init__(xml, *args, **kwargs)
+        self.delegation_mode = delegation_mode
         if self.exists():
             xmlns = self.data_node.tag_xmlns
             self.namespaces.update(x="{%s}" % xmlns)
@@ -651,7 +652,7 @@ class XForm(WrappedNode):
             case_block = make_case_block()
 
             this_case_id = SESSION_CASE_ID
-            if form.get_module().task_mode:
+            if self.delegation_mode:
                 this_case_id = this_case_id.case().parent_id()
 
             if 'open_case' in actions:

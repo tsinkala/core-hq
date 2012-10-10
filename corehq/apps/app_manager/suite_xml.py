@@ -269,10 +269,11 @@ class IdStrings(object):
         return module.get_referral_list_locale_id()
 
 class SuiteGenerator(object):
-    def __init__(self, app):
+    def __init__(self, app, delegation_mode=False):
         self.app = app
         # this is actually so slow it's worth caching
         self.modules = list(self.app.get_modules())
+        self.delegation_mode = False
         self.id_strings = IdStrings()
 
     @property
@@ -321,10 +322,10 @@ class SuiteGenerator(object):
                             id=self.id_strings.detail(module, detail),
                             title=Text(locale_id=self.id_strings.detail_title_locale(module, detail))
                         )
-                        if module.task_mode:
+                        if self.delegation_mode:
                             d.add_variable('parent_id', 'index/parent')
                         for column in detail_columns:
-                            fields = get_column_generator(self.app, module, detail, column).fields
+                            fields = get_column_generator(self.app, module, detail, column, suite_generator=self).fields
                             d.fields.extend(fields)
                         try:
                             d.fields[0].sort = 'default'

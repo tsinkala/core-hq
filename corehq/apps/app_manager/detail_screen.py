@@ -1,7 +1,7 @@
 from corehq.apps.app_manager import suite_xml as sx, xform
 
-def get_column_generator(app, module, detail, column):
-    return get_class_for_format(column.format)(app, module, detail, column)
+def get_column_generator(app, module, detail, column, suite_generator):
+    return get_class_for_format(column.format)(app, module, detail, column, suite_generator)
 
 def get_class_for_format(slug):
     return get_class_for_format._format_map.get(slug, FormattedDetailColumn)
@@ -23,12 +23,13 @@ class FormattedDetailColumn(object):
     template_width = None
     template_form = None
 
-    def __init__(self, app, module, detail, column):
+    def __init__(self, app, module, detail, column, suite_generator=None):
         from corehq.apps.app_manager.suite_xml import IdStrings
         self.app = app
         self.module = module
         self.detail = detail
         self.column = column
+        self.suite_generator = suite_generator
         self.id_strings = IdStrings()
 
     @property
@@ -63,7 +64,7 @@ class FormattedDetailColumn(object):
     @property
     def xpath(self):
         property = self.column.xpath
-        if self.module.task_mode:
+        if self.suite_generator and self.suite_generator.delegation_mode:
             return xform.CaseIDXPath('$parent_id').case().property(property)
         else:
             return property

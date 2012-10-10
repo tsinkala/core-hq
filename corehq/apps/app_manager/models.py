@@ -326,8 +326,8 @@ class FormBase(DocumentSchema):
         xform.set_default_language(app.build_langs[0])
         xform.set_version(self.get_app().version)
 
-    def render_xform(self):
-        xform = XForm(self.source)
+    def render_xform(self, delegation_mode=False):
+        xform = XForm(self.source, delegation_mode=delegation_mode)
         self.add_stuff_to_xform(xform)
         return xform.render()
 
@@ -629,8 +629,6 @@ class Module(IndexedSchema, NavMenuItemMediaMixin):
     put_in_root = BooleanProperty(default=False)
     case_list = SchemaProperty(CaseList)
     referral_list = SchemaProperty(CaseList)
-
-    task_mode = BooleanProperty(default=False)
 
     def rename_lang(self, old_lang, new_lang):
         _rename_key(self.name, old_lang, new_lang)

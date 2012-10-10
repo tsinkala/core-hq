@@ -41,18 +41,16 @@ class FormPreparationV2Test(TestCase, TestFileMixin):
         self.form.actions.update_case.condition.type = 'always'
         check_xml_line_by_line(self, self.get_xml('open_update_case'), self.form.render_xform())
 
-    def test_update_preload_case(self, TARGET='update_preload_case'):
+    def test_update_preload_case(self, TARGET='update_preload_case', delegation_mode=False):
         self.form.requires = 'case'
         self.form.actions.update_case = UpdateCaseAction(update={'question1': '/data/question1'})
         self.form.actions.update_case.condition.type = 'always'
         self.form.actions.case_preload = PreloadAction(preload={'/data/question1': 'question1'})
         self.form.actions.case_preload.condition.type = 'always'
-        check_xml_line_by_line(self, self.get_xml(TARGET), self.form.render_xform())
+        check_xml_line_by_line(self, self.get_xml(TARGET), self.form.render_xform(delegation_mode=delegation_mode))
 
-    def test_task_mode_update_preload_case(self):
-        self.module.task_mode = True
-        self.test_update_preload_case('task_mode_update_preload_case')
-        self.module.task_mode = False
+    def test_delegation_mode_update_preload_case(self):
+        self.test_update_preload_case('delegation_mode_update_preload_case', delegation_mode=True)
 
     def test_close_case(self):
         self.form.requires = 'case'
