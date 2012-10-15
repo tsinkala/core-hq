@@ -3,7 +3,8 @@ var HQReport = function (options) {
     var self = this;
     self.domain = options.domain;
     self.datespan = options.datespan;
-
+    self.filterSet = options.filterSet || false;
+    self.needsFilters = options.needsFilters || false;
     self.filterAccordion = options.filterAccordion || "#reportFilters";
     self.filterSubmitButton = options.filterSubmitButton || $('#paramSelectorForm button[type="submit"]');
     self.toggleFiltersButton = options.toggleFiltersButton || "#toggle-report-filters";
@@ -34,6 +35,9 @@ var HQReport = function (options) {
             });
 
             self.resetFilterState();
+            if (self.needsFilters) {
+                self.filterSubmitButton.button('reset').addClass('btn-primary');
+            }
         });
     };
 
@@ -74,20 +78,29 @@ var HQReport = function (options) {
     };
 
     var checkFilterAccordionToggleState = function () {
+        var _setShowFilterCookie = function (show) {
+            var showStr = show ? 'in' : '';
+            $.cookie(self.toggleFiltersCookie, showStr, {path: self.urlRoot, expires: 1});
+        };
+        
+        if ($.cookie(self.toggleFiltersCookie) === null) {
+            // default to showing filters
+            _setShowFilterCookie(true);
+        }
         $(self.filterAccordion).addClass($.cookie(self.toggleFiltersCookie));
-
+        
         if ($.cookie(self.toggleFiltersCookie) == 'in')
             $(self.toggleFiltersButton).button('hide');
         else
             $(self.toggleFiltersButton).button('show');
 
         $(self.filterAccordion).on('hidden', function () {
-            $.cookie(self.toggleFiltersCookie, '', {path: self.urlRoot, expires: 1});
+            _setShowFilterCookie(false);
             $(self.toggleFiltersButton).button('show');
         });
 
         $(self.filterAccordion).on('show', function () {
-            $.cookie(self.toggleFiltersCookie, 'in', {path: self.urlRoot, expires: 1});
+            _setShowFilterCookie(true);
             $(self.toggleFiltersButton).button('hide');
         });
 

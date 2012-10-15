@@ -4,6 +4,11 @@
 {% load i18n %}
 
 {% block reportcontent %}
+{% if report.needs_filters %}
+    <div class="well">
+        <p>Please choose your filters above to see report data.</p>
+    </div>
+{% else %}        
     <table class="table table-striped datatable" {% if pagination.filter %} data-filter="true"{% endif %}>
         <thead>
         {%  if report_table.headers.complex %}
@@ -52,6 +57,7 @@
             </tfoot>
         {% endif %}
     </table>
+{% endif %}
 {% endblock %}
 
 {% block js-inline %} {{ block.super }}

@@ -1,4 +1,5 @@
 import datetime
+import dateutil
 from corehq.apps import receiverwrapper
 from django.core.urlresolvers import reverse
 from django.http import HttpResponseRedirect, HttpResponse, Http404
@@ -311,11 +312,13 @@ def create_snapshot(request, domain):
                 'description': published_snapshot.description,
                 'short_description': published_snapshot.short_description
             })
+            print published_snapshot._id
             for app in published_snapshot.full_applications():
+                print 'ps.fa: %s' % app._id
                 if domain == published_snapshot:
                     published_apps[app._id] = app
                 else:
-                    published_apps[app.original_doc] = app
+                    published_apps[app.copied_from._id] = app
         app_forms = []
         for app in domain.applications():
             app = app.get_latest_saved() or app
@@ -408,15 +411,18 @@ def create_snapshot(request, domain):
             new_domain.put_attachment(content=old.fetch_attachment(old.image_path), name=new_domain.image_path)
 
         for application in new_domain.full_applications():
-            original_id = application.original_doc
+            original_id = application.copied_from._id
             if request.POST.get("%s-publish" % original_id, False):
                 application.name = request.POST["%s-name" % original_id]
                 application.description = request.POST["%s-description" % original_id]
                 application.short_description = request.POST["%s-short_description" % original_id]
-                date_picked = request.POST["%s-deployment_date" % original_id].split('-')
-                if len(date_picked) > 1:
-                    if int(date_picked[0]) > 2009 and date_picked[1] and date_picked[2]:
-                        application.deployment_date = datetime.datetime(int(date_picked[0]), int(date_picked[1]), int(date_picked[2]))
+                date_picked = request.POST["%s-deployment_date" % original_id]
+                try:
+                    date_picked = dateutil.parser.parse(date_picked)
+                    if date_picked.year > 2009:
+                        application.deployment_date = date_picked
+                except Exception:
+                    pass
                 #if request.POST.get("%s-name" % original_id):
                 application.phone_model = request.POST["%s-phone_model" % original_id]
                 application.attribution_notes = request.POST["%s-attribution_notes" % original_id]
@@ -448,7 +454,7 @@ def set_published_snapshot(request, domain, snapshot_name=''):
                 snapshot.save()
         if snapshot_name != '':
             published_snapshot = Domain.get_by_name(snapshot_name)
-            if published_snapshot.original_doc != domain.name:
+            if published_snapshot.copied_from.name != domain.name:
                 messages.error(request, "Invalid snapshot")
             published_snapshot.published = True
             published_snapshot.save()
