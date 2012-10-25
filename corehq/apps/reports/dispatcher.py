@@ -99,7 +99,7 @@ class ReportDispatcher(View):
             for model_path in report_model_paths:
                 report_class = to_function(model_path) # todo store this reference in a singleton ?
                 if report_class.slug == current_slug:
-                    report = report_class(request, *args, **kwargs)
+                    report = report_class(request, domain=kwargs.get('domain'))
                     report.rendered_as = render_as
                     if self.permissions_check(model_path, request, *args, **kwargs):
                         return getattr(report, '%s_response' % render_as)
