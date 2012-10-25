@@ -29,7 +29,7 @@ class ApplicationStatusReport(DeploymentsReport):
     @property
     def rows(self):
         rows = []
-        selected_app = self.request_params.get(SelectApplicationField.slug, '')
+        selected_app = self.report_request.params.get(SelectApplicationField.slug, '')
         for user in self.users:
             last_seen = self.table_cell(-1, "Never")
             version = "---"

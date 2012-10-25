@@ -151,7 +151,7 @@ class CaseActivityReport(WorkerMonitoringReportTable):
     @property
     def landmarks(self):
         if self._landmarks is None:
-            landmarks_param = self.request_params.get('landmarks')
+            landmarks_param = self.report_request.params.get('landmarks')
             landmarks_param = landmarks_param if isinstance(landmarks_param, list) else []
             landmarks_param = [param for param in landmarks_param if isinstance(param, int)]
             if landmarks_param:
@@ -169,7 +169,7 @@ class CaseActivityReport(WorkerMonitoringReportTable):
     @property
     def milestone(self):
         if self._milestone is None:
-            milestone_param = self.request_params.get('milestone')
+            milestone_param = self.report_request.params.get('milestone')
             milestone_param = milestone_param if isinstance(milestone_param, int) else None
             if milestone_param:
                 if milestone_param not in self.cached_report.active_cases or\
@@ -265,7 +265,7 @@ class CaseActivityReportCahed(WorkerMonitoringReportTable, CouchCachedReportMixi
     @property
     def landmarks(self):
         if self._landmarks is None:
-            landmarks_param = self.request_params.get('landmarks')
+            landmarks_param = self.report_request.params.get('landmarks')
             landmarks_param = landmarks_param if isinstance(landmarks_param, list) else []
             landmarks_param = [param for param in landmarks_param if isinstance(param, int)]
             if landmarks_param:
@@ -282,7 +282,7 @@ class CaseActivityReportCahed(WorkerMonitoringReportTable, CouchCachedReportMixi
     @property
     def milestone(self):
         if self._milestone is None:
-            milestone_param = self.request_params.get('milestone')
+            milestone_param = self.report_request.params.get('milestone')
             milestone_param = milestone_param if isinstance(milestone_param, int) else None
             if milestone_param:
                 if milestone_param not in self.cached_report.active_cases or\
@@ -590,7 +590,7 @@ class FormCompletionTrendsReport(WorkerMonitoringReportTable, DatespanMixin):
 
     @property
     def rows(self):
-        form = self.request_params.get('form', '')
+        form = self.report_request.params.get('form', '')
         rows = []
         if not form:
             return rows
@@ -652,7 +652,7 @@ class FormCompletionVsSubmissionTrendsReport(WorkerMonitoringReportTable, Datesp
     def rows(self):
         rows = list()
         prefix = ["user"]
-        selected_form = self.request_params.get('form')
+        selected_form = self.report_request.params.get('form')
         if selected_form:
             prefix.append("form_type")
         total = 0

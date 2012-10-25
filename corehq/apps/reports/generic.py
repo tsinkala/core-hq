@@ -164,7 +164,7 @@ class GenericReportView(object):
 
         self.request = request
         self.report_request = ReportHttpRequest(self.request)
-        self.request_params = json_request(self.request.GET)
+        self.report_request.params = json_request(self.request.GET)
         self.domain = domain
         self.context = base_context or {}
         self._is_pickle = False

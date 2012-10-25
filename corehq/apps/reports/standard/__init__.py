@@ -48,7 +48,7 @@ class ProjectReportParametersMixin(object):
     @property
     def group_name(self):
         if self._group_name is None:
-            self._group_name = self.request_params.get('group', '')
+            self._group_name = self.report_request.params.get('group', '')
         return self._group_name
 
     _group = None
@@ -66,7 +66,7 @@ class ProjectReportParametersMixin(object):
             self.name = "%s for %s" % (self.name, self.users[0].get('raw_username'))
         """
         if self._individual is None:
-            self._individual = self.request_params.get('individual', '')
+            self._individual = self.report_request.params.get('individual', '')
         return self._individual
 
     _users = None
@@ -98,7 +98,7 @@ class ProjectReportParametersMixin(object):
     @property
     def history(self):
         if self._history is None:
-            self._history = self.request_params('history')
+            self._history = self.report_request.params('history')
             if self._history:
                 try:
                     self._history = dateutil.parser.parse(self._history)
@@ -110,7 +110,7 @@ class ProjectReportParametersMixin(object):
     @property
     def case_type(self):
         if self._case_type is None:
-            self._case_type = self.request_params.get('case_type', '')
+            self._case_type = self.report_request.params.get('case_type', '')
         return self._case_type
 
     _case_status = None
@@ -118,7 +118,7 @@ class ProjectReportParametersMixin(object):
     def case_status(self):
         if self._case_status is None:
             from corehq.apps.reports.fields import SelectOpenCloseField
-            self._case_status = self.request_params.get(SelectOpenCloseField.slug, '')
+            self._case_status = self.report_request.params.get(SelectOpenCloseField.slug, '')
         return self._case_status
 
 

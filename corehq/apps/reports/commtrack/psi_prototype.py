@@ -37,7 +37,7 @@ class CommtrackReportMixin(ProjectReport, ProjectReportParametersMixin):
     @property
     def active_location(self):
         if not self._location:
-            loc_id = self.request_params.get('location_id')
+            loc_id = self.report_request.params.get('location_id')
             if loc_id:
                 self._location = Location.get(loc_id)
         return self._location

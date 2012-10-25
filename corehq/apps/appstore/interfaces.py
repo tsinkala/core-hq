@@ -37,28 +37,28 @@ class CommCareExchangeAdvanced(GenericTabularReport, AppstoreInterface, Datespan
     @property
     def organization_filter(self):
         if self._organization_filter is None:
-            self._organization_filter = self.request_params.get('org')
+            self._organization_filter = self.report_request.params.get('org')
         return self._organization_filter
 
     _license_filter = None
     @property
     def license_filter(self):
         if self._license_filter is None:
-            self._license_filter = self.request_params.get('license')
+            self._license_filter = self.report_request.params.get('license')
         return self._license_filter
 
     _category_filter = None
     @property
     def category_filter(self):
         if self._category_filter is None:
-            self._category_filter = self.request_params.get('category')
+            self._category_filter = self.report_request.params.get('category')
         return self._category_filter
 
     _region_filter = None
     @property
     def region_filter(self):
         if self._region_filter is None:
-            self._region_filter = self.request_params.get('region')
+            self._region_filter = self.report_request.params.get('region')
         return self._region_filter
 
     @property
