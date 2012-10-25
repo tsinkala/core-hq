@@ -8,6 +8,7 @@ import json
 from django.template.loader import render_to_string
 import pickle
 import pytz
+from corehq.apps.reports.models import ReportConfig
 from corehq.apps.reports import util
 from corehq.apps.reports.datatables import DataTablesHeader
 from corehq.apps.users.models import CouchUser
@@ -74,6 +75,7 @@ class GenericReportView(object):
     fields = None
 
     exportable = False
+    mobile_enabled = False
     export_format_override = None
     icon = None
 
@@ -431,12 +433,20 @@ class GenericReportView(object):
         """
             Intention: Don't override.
         """
+
+        report_configs = ReportConfig.by_domain_and_owner(self.domain,
+            self.request.couch_user._id, report_slug=self.slug).all()
+        current_config_id = self.request.GET.get('config_id', '')
+        default_config = ReportConfig.default()
+
         self.context.update(
             report=dict(
                 title=self.name,
                 description=self.description,
                 section_name=self.section_name,
                 slug=self.slug,
+                sub_slug=None,
+                type=self.dispatcher.prefix,
                 url_root=self.url_root,
                 is_async=self.asynchronous,
                 is_exportable=self.exportable,
@@ -444,8 +454,11 @@ class GenericReportView(object):
                 filter_set=self.filter_set,
                 needs_filters=self.needs_filters,
                 show=self.request.couch_user.can_view_reports() or self.request.couch_user.get_viewable_reports(),
-                is_admin=self.is_admin_report # todo is this necessary???
+                is_admin=self.is_admin_report,   # todo is this necessary???
             ),
+            current_config_id=current_config_id,
+            default_config=default_config,
+            report_configs=report_configs,
             show_time_notice=self.show_time_notice,
             domain=self.domain,
             layout_flush_content=self.flush_layout
@@ -520,10 +533,30 @@ class GenericReportView(object):
         return render_to_response(self.request, template, self.context)
 
     @property
+    def mobile_response(self):
+        """
+        This tries to render a mobile version of the report, by just calling 
+        out to a very simple default template. Likely won't work out of the box
+        with most reports.
+        """
+        if not self.mobile_enabled:
+            raise NotImplementedError("This report isn't configured for mobile usage. "
+                                      "If you're a developer, add mobile_enabled=True "
+                                      "to the report config.")
+        # TODO: this is wacky / copy paste, and breaks all kinds of abstraction
+        # barriers. 
+        self.context.update(original_template=self.template_report)
+        self._template_report = "reports/async/static_only.html"
+        report_context = self._async_context()
+        return render_to_response(self.request, 
+                                  "reports/mobile/mobile_report_base.html", 
+                                  report_context)
+    
+    @property
     def static_response(self):
         """
-            This renders _only_ the static html content of the report. It is intended for
-            use by the report scheduler.
+        This renders a json object containing a pointer to the static html 
+        content of the report. It is intended for use by the report scheduler.
         """
         self.context.update(original_template=self.template_report)
         self._template_report = "reports/async/static_only.html"
@@ -535,6 +568,9 @@ class GenericReportView(object):
             Intention: Not to be overridden in general.
             Renders the asynchronous view of the report template, returned as json.
         """
+        return HttpResponse(json.dumps(self._async_context()))
+    
+    def _async_context(self):
         self.update_template_context()
         self.update_report_context()
 
@@ -548,13 +584,13 @@ class GenericReportView(object):
             context_instance=RequestContext(self.request)
         )
 
-        return HttpResponse(json.dumps(dict(
+        return dict(
             filters=rendered_filters,
             report=rendered_report,
             title=self.rendered_report_title,
             slug=self.slug,
             url_root=self.url_root
-        )))
+        )
 
     @property
     def filters_response(self):
@@ -647,6 +683,7 @@ class GenericTabularReport(GenericReportView):
     """
     # new class properties
     total_row = None
+    statistics_rows = None
     default_rows = 10
     start_at_row = 0
     show_all_rows = False
@@ -783,6 +820,8 @@ class GenericTabularReport(GenericReportView):
         table.extend(rows)
         if self.total_row:
             table.append(_unformat_row(self.total_row))
+        if self.statistics_rows:
+            table.extend([_unformat_row(row) for row in self.statistics_rows])
 
         return [[self.export_sheet_name, table]]
 
@@ -809,6 +848,9 @@ class GenericTabularReport(GenericReportView):
 
         if self.total_row is not None and not isinstance(self.total_row, list):
             raise ValueError("'total_row' should be a list.")
+        if self.statistics_rows is not None and not isinstance(self.statistics_rows, list) \
+                and not isinstance(self.statistics_rows[0], list):
+            raise ValueError("'statics row' should be a list of rows.")
 
         pagination_spec = dict(is_on=self.ajax_pagination)
         if self.ajax_pagination:
@@ -833,6 +875,7 @@ class GenericTabularReport(GenericReportView):
                 headers=headers,
                 rows=rows,
                 total_row=self.total_row,
+                statistics_rows=self.statistics_rows,
                 default_rows=self.default_rows,
                 start_at_row=self.start_at_row,
                 show_all_rows=self.show_all_rows,
@@ -847,3 +890,32 @@ class GenericTabularReport(GenericReportView):
             sort_key=value,
             html="%s" % value if html is None else html
         )
+
+
+class SummaryTablularReport(GenericTabularReport):
+    report_template_path = "reports/async/summary_tabular.html"
+    
+    @property
+    def data(self):
+        """
+        Should return a list of data values, that corresponds to the
+        headers.
+        """
+        raise NotImplementedError("Override this function!")
+    
+    @property
+    def rows(self):
+        # for backwards compatibility / easy switching with a single-row table
+        return [self.data]
+    
+    @property
+    def summary_values(self):
+        headers = list(self.headers)
+        assert (len(self.data) == len(headers))
+        return zip(headers, self.data)
+    
+    @property
+    def report_context(self):
+        context = super(SummaryTablularReport, self).report_context
+        context["summary_values"] = self.summary_values
+        return context

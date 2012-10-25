@@ -1,5 +1,7 @@
 from casexml.apps.case.models import CommCareCase
+from corehq.apps.app_manager.suite_xml import SuiteGenerator
 from corehq.apps.cloudcare.models import CaseSpec
+from corehq.apps.cloudcare.touchforms_api import DELEGATION_STUB_CASE_TYPE
 from corehq.apps.domain.decorators import login_and_domain_required,\
     login_or_digest_ex
 from corehq.apps.groups.models import Group
@@ -29,7 +31,6 @@ def default(request, domain):
 @login_and_domain_required
 def app_list(request, domain, urlPath):
     preview = string_to_boolean(request.REQUEST.get("preview", "false"))
-    language = request.couch_user.language or "en"
     
     def _app_latest_build_json(app_id):
         build = ApplicationBase.view('app_manager/saved_app',
@@ -50,6 +51,18 @@ def app_list(request, domain, urlPath):
     
     # trim out empty apps
     apps = filter(lambda app: app, apps)
+    
+    
+    def _default_lang():
+        if apps:
+            # unfortunately we have to go back to the DB to find this
+            return Application.get(apps[0]["_id"]).build_langs[0]
+        else:
+            return "en"
+    
+    # default language to user's preference, followed by 
+    # first app's default, followed by english
+    language = request.couch_user.language or _default_lang()
     return render_to_response(request, "cloudcare/cloudcare_home.html", 
                               {"domain": domain,
                                "language": language,
@@ -64,10 +77,11 @@ def form_context(request, domain, app_id, module_id, form_id):
     app = Application.get(app_id)
     module = app.get_module(module_id)
     form = module.get_form(form_id)
-    case_id = request.REQUEST.get("case_id")
+    case_id = request.GET.get('case_id')
+    delegation = request.GET.get('task-list') == 'true'
     return json_response(
         touchforms_api.get_full_context(domain, request.couch_user, 
-                                        app, module, form, case_id))
+                                        app, module, form, case_id, delegation=delegation))
         
 @login_and_domain_required
 def case_list(request, domain):
@@ -134,6 +148,7 @@ def get_groups(request, domain, user_id):
 @cloudcare_api
 def get_cases(request, domain):
 
+
     if request.couch_user.is_commcare_user():
         user_id = request.couch_user.get_id
     else:
@@ -142,32 +157,48 @@ def get_cases(request, domain):
     if not user_id and not request.couch_user.is_web_user():
         return HttpResponseBadRequest("Must specify user_id!")
 
+    footprint = string_to_boolean(request.REQUEST.get("footprint", "false"))
     filters = get_filters_from_request(request)
-
-    cases = get_filtered_cases(domain, user_id=user_id, filters=filters)
+    cases = get_filtered_cases(domain, user_id=user_id, filters=filters, 
+                               footprint=footprint)
     return json_response(cases)
 
 @cloudcare_api
 def filter_cases(request, domain, app_id, module_id):
     app = Application.get(app_id)
     module = app.get_module(module_id)
+    delegation = request.GET.get('task-list') == 'true'
     auth_cookie = request.COOKIES.get('sessionid')
-    details = module.details
-    xpath_parts = []
-    for detail in details:
-        if detail.filter_xpath_2():
-            xpath_parts.append(detail.filter_xpath_2())
-    xpath = "".join(xpath_parts)
+
+    xpath = SuiteGenerator(app).get_filter_xpath(module, delegation=delegation)
+
     # touchforms doesn't like this to be escaped
     xpath = HTMLParser.HTMLParser().unescape(xpath)
-    additional_filters = {"properties/case_type": module.case_type }
+    if delegation:
+        case_type = DELEGATION_STUB_CASE_TYPE
+    else:
+        case_type = module.case_type
+    additional_filters = {
+        "properties/case_type": case_type,
+        "footprint": True
+    }
     result = touchforms_api.filter_cases(domain, request.couch_user, 
                                          xpath, additional_filters, 
                                          auth=DjangoAuth(auth_cookie))
     case_ids = result.get("cases", [])
     cases = [CommCareCase.get(id) for id in case_ids]
     cases = [c.get_json() for c in cases if c]
-    return json_response(cases)
+    parents = []
+    if delegation:
+        for case in cases:
+            parent_id = case['indices']['parent']['case_id']
+            parents.append(CommCareCase.get(parent_id))
+        return json_response({
+            'cases': cases,
+            'parents': parents
+        })
+    else:
+        return json_response(cases)
     
 @cloudcare_api
 def get_apps_api(request, domain):
@@ -180,6 +211,7 @@ def get_app_api(request, domain, app_id):
 @cloudcare_api
 def get_fixtures(request, domain, user_id, fixture_id=None):
     user = CommCareUser.get_by_user_id(user_id)
+    
     if not user:
         raise Http404
 

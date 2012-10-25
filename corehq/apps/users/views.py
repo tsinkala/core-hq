@@ -455,12 +455,7 @@ def domain_accounts(request, domain, couch_user_id, template="users/domain_accou
         couch_user.add_domain_membership(domain)
         couch_user.save()
         messages.success(request,'Domain added')
-    my_domains = couch_user.get_domains()
-    all_domains = Domain.get_all()
-    context['other_domains'] = [d.name for d in all_domains if d.name not in my_domains]
-    context.update({"user": request.user,
-                    "domains": couch_user.get_domains(),
-                    })
+    context.update({"user": request.user})
     return render_to_response(request, template, context)
 
 @require_POST
@@ -651,21 +646,10 @@ GROUP VIEWS
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
 
-def _get_groups(domain):
-    key = [domain]
-    groups = Group.view("groups/by_name", startkey=key, endkey=key + [{}], include_docs=True)
-    for group in groups:
-        name = group.name if group.name else '-'
-        if group.name != name:
-            group.name = name
-            group.save()
-    return groups
-
-
 @require_can_edit_commcare_users
 def all_groups(request, domain, template="groups/all_groups.html"):
     context = _users_context(request, domain)
-    all_groups = _get_groups(domain)
+    all_groups = Group.by_domain(domain)
     context.update({
         'domain': domain,
         'all_groups': all_groups
@@ -675,7 +659,7 @@ def all_groups(request, domain, template="groups/all_groups.html"):
 @require_can_edit_commcare_users
 def group_members(request, domain, group_id, template="groups/group_members.html"):
     context = _users_context(request, domain)
-    all_groups = _get_groups(domain)
+    all_groups = Group.by_domain(domain)
     group = Group.get(group_id)
     if group is None:
         raise Http404("Group %s does not exist" % group_id)

@@ -74,6 +74,9 @@ from django.contrib import messages
 
 require_can_edit_apps = require_permission(Permissions.edit_apps)
 
+def set_file_download(response, filename):
+    response["Content-Disposition"] = "attachment; filename=%s" % filename
+
 def _encode_if_unicode(s):
     return s.encode('utf-8') if isinstance(s, unicode) else s
 @login_and_domain_required
@@ -146,7 +149,7 @@ def _get_xform_source(request, app, form, filename="form.xml"):
             if lc in form.name:
                 filename = "%s.xml" % unidecode(form.name[lc])
                 break
-        response["Content-Disposition"] = "attachment; filename=%s" % filename
+        set_file_download(response, filename)
         return response
     else:
         return json_response(source)
@@ -779,6 +782,7 @@ def edit_module_attr(req, domain, app_id, module_id, attr):
         "name": None, "case_label": None, "referral_label": None,
         'media_image': None, 'media_audio': None,
         "case_list": ('case_list-show', 'case_list-label'),
+        "task_list": ('task_list-show', 'task_list-label'),
         }
 
     if attr not in attributes:
@@ -815,9 +819,10 @@ def edit_module_attr(req, domain, app_id, module_id, attr):
             module[attribute][lang] = name
             if should_edit("name"):
                 resp['update'].update({'.variable-module_name': module.name[lang]})
-    if should_edit("case_list"):
-        module["case_list"].show = json.loads(req.POST['case_list-show'])
-        module["case_list"].label[lang] = req.POST['case_list-label']
+    for SLUG in ('case_list', 'task_list'):
+        if should_edit(SLUG):
+            module[SLUG].show = json.loads(req.POST['{SLUG}-show'.format(SLUG=SLUG)])
+            module[SLUG].label[lang] = req.POST['{SLUG}-label'.format(SLUG=SLUG)]
 
     _handle_media_edits(req, module, should_edit, resp)
 
@@ -1096,7 +1101,7 @@ def multimedia_list_download(req, domain, app_id):
     if strip_jr:
         filelist = [s.replace("jr://file/", "") for s in filelist if s]
     response = HttpResponse()
-    response['Content-Disposition'] = 'attachment; filename=list.txt'
+    set_file_download(response, 'list.txt')
     response.write("\n".join(sorted(set(filelist))))
     return response
 
@@ -1637,7 +1642,7 @@ def download_multimedia_zip(req, domain, app_id):
         return HttpResponseServerError("Errors were encountered while retrieving media for this application.<br /> %s" % "<br />".join(errors))
 
     response = HttpResponse(mimetype="application/zip")
-    response["Content-Disposition"] = "attachment; filename=commcare.zip"
+    set_file_download(response, 'commcare.zip')
     temp.seek(0)
     response.write(temp.read())
     return response
@@ -1659,7 +1664,7 @@ def download_jad(req, domain, app_id):
     except Exception:
         messages.error(req, BAD_BUILD_MESSAGE)
         return back_to_main(**locals())
-    response["Content-Disposition"] = "filename=%s.jad" % "CommCare"
+    set_file_download(response, "CommCare.jad")
     response["Content-Type"] = "text/vnd.sun.j2me.app-descriptor"
     response["Content-Length"] = len(jad)
     return response
@@ -1677,7 +1682,7 @@ def download_jar(req, domain, app_id):
     response = HttpResponse(mimetype="application/java-archive")
     app = req.app
     _, jar = app.create_jadjar()
-    response['Content-Disposition'] = "filename=%s.jar" % "CommCare"
+    set_file_download(response, 'CommCare.jar')
     response['Content-Length'] = len(jar)
     try:
         response.write(jar)
@@ -1691,7 +1696,7 @@ def download_test_jar(request):
         jar = f.read()
 
     response = HttpResponse(mimetype="application/java-archive")
-    response['Content-Disposition'] = "filename=CommCare.jar"
+    set_file_download(response, "CommCare.jar")
     response['Content-Length'] = len(jar)
     response.write(jar)
     return response
@@ -1768,7 +1773,7 @@ def formdefs(request, domain, app_id):
         ) for sheet in formdefs])
         writer.close()
         response = HttpResponse(f.getvalue(), mimetype=Format.from_format('xlsx').mimetype)
-        response["Content-Disposition"] = "attachment; filename=%s" % 'formdefs.xlsx'
+        set_file_download(response, 'formdefs.xlsx')
         return response
     else:
         return json_response(formdefs)
