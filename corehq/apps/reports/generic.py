@@ -1,6 +1,7 @@
 from StringIO import StringIO
 import datetime
 from celery.log import get_task_logger
+import copy
 from django.core.urlresolvers import reverse
 from django.http import HttpResponse
 from django.template.context import RequestContext
@@ -11,14 +12,72 @@ import pytz
 from corehq.apps.reports.models import ReportConfig
 from corehq.apps.reports import util
 from corehq.apps.reports.datatables import DataTablesHeader
-from corehq.apps.users.models import CouchUser
+from corehq.apps.users.models import CouchUser, WebUser
 from couchexport.export import export_from_tables
 from couchexport.shortcuts import export_response
 from dimagi.utils.couch.pagination import DatatablesParams
 from dimagi.utils.dates import DateSpan
+from dimagi.utils.decorators.memoized import memoized
 from dimagi.utils.modules import to_function
 from dimagi.utils.web import render_to_response, json_request
 from dimagi.utils.parsing import string_to_boolean
+
+
+class ReportHttpRequest(object):
+    """
+        An object that takes all the essentials from the request object passed into the report that are
+        necessary for rendering the report_context.
+
+        The primary feature of this object is that it can be pickled---a requirement for caching things like
+        report context.
+
+        The motivation for creating this object is so that you know exactly what's available to the pickle-able
+        parts of this report when you create them.
+    """
+
+    def __init__(self, request):
+        self.GET = copy.copy(request.GET)
+        self.META = dict(
+            QUERY_STRING=copy.copy(request.META.get('QUERY_STRING')),
+            PATH_INFO=copy.copy(request.META.get('PATH_INFO')),
+        )
+        self.datespan = request.datespan
+
+        if request.couch_user:
+            print "COUCH USER TYPE" ,type(request.couch_user)
+            self.couch_user_id = request.couch_user.get_id
+
+    @property
+    @memoized
+    def couch_user(self):
+        if self.couch_user_id:
+            return WebUser.get(self.couch_user_id)
+
+    @property
+    @memoized
+    def params(self):
+        return json_request(self.GET)
+
+    def __getstate__(self):
+        """
+            This creates the pickle.
+        """
+        return dict(
+            GET=self.GET,
+            META=self.META,
+            datespan=self.datespan,
+            couch_user_id=self.couch_user_id
+        )
+
+    def __setstate__(self, state):
+        """
+            THis unpickles the pickle
+        """
+        self.GET = state.get('GET', {})
+        self.META = state.get('META', dict(QUERY_STRING="", PATH_INFO=""))
+        self.datespan = state.get('datespan', DateSpan.since(7, format="%Y-%m-%d"))
+        self.couch_user_id = state.get('couch_user_id')
+
 
 class GenericReportView(object):
     """
@@ -93,24 +152,22 @@ class GenericReportView(object):
     is_admin_report = False
     
     
-    def __init__(self, request, base_context=None, *args, **kwargs):
+    def __init__(self, request, domain=None, base_context=None):
         if not self.name or not self.section_name or self.slug is None or not self.dispatcher:
-            raise NotImplementedError("Missing a required parameter: (name: %(name)s, section_name: %(section_name)s,"
-            " slug: %(slug)s, dispatcher: %(dispatcher)s" % dict(
-                name=self.name,
-                section_name=self.section_name,
-                slug=self.slug,
-                dispatcher=self.dispatcher
-            ))
+            missing_params = [param for param in ['name', 'section_name', 'slug', 'dispatcher']
+                              if not getattr(self, param)]
+            raise NotImplementedError("Missing: %s" % ", ".join(missing_params))
 
         from corehq.apps.reports.dispatcher import ReportDispatcher
         if isinstance(self.dispatcher, ReportDispatcher):
             raise ValueError("Class property dispatcher should point to a subclass of ReportDispatcher.")
 
         self.request = request
+        self.report_request = ReportHttpRequest(self.request)
         self.request_params = json_request(self.request.GET)
-        self.domain = kwargs.get('domain')
+        self.domain = domain
         self.context = base_context or {}
+        self._is_pickle = False
         self._update_initial_context()
 
     def __str__(self):
@@ -130,29 +187,12 @@ class GenericReportView(object):
         logging = get_task_logger() # logging is likely to happen within celery.
         # pickle only what the report needs from the request object
 
-        request = dict(
-            GET=self.request.GET,
-            META=dict(
-                QUERY_STRING=self.request.META.get('QUERY_STRING'),
-                PATH_INFO=self.request.META.get('PATH_INFO')
-            ),
-            datespan=self.request.datespan,
-            couch_user=None
-        )
-
-        try:
-            request.update(couch_user=self.request.couch_user.get_id)
-        except Exception as e:
-            logging.error("Could not pickle the couch_user id from the request object for report %s. Error: %s" %
-                          (self.name, e))
         return dict(
-            request=request,
-            request_params=self.request_params,
+            report_request=self.report_request,
             domain=self.domain,
             context={}
         )
 
-    _caching = False
     def __setstate__(self, state):
         """
             For unpickling a pickled report.
@@ -161,28 +201,8 @@ class GenericReportView(object):
         self.domain = state.get('domain')
         self.context = state.get('context', {})
 
-        # todo put HttpRequestParameters object in init with getstate/setstate self.cached_request ?
-        class FakeHttpRequest(object):
-            GET = {}
-            META = {}
-            couch_user = None
-            datespan = None
-
-        request_data = state.get('request')
-        request = FakeHttpRequest()
-        request.GET = request_data.get('GET', {})
-        request.META = request_data.get('META', {})
-        request.datespan = request_data.get('datespan')
-
-        try:
-            couch_user = CouchUser.get(request_data.get('couch_user'))
-            request.couch_user = couch_user
-        except Exception as e:
-            logging.error("Could not unpickle couch_user from request for report %s. Error: %s" %
-                            (self.name, e))
-        self.request = request
-        self._caching = True
-        self.request_params = state.get('request_params')
+        self.report_request = state.get('report_request')
+        self._is_pickle = True
         self._update_initial_context()
 
     _url_root = None
@@ -431,9 +451,14 @@ class GenericReportView(object):
     
     def _update_initial_context(self):
         """
-            Intention: Don't override.
-        """
+            This is called when the overall report template is rendered (ex report_base.html)
+            Things that should go here:
+            - parameters for initializing reports.config.js and reports.async.js
 
+            Things that should not go in here:
+            - anything that requires wrapping of lots and lots of couch Documents
+            - any super intensive calculations
+        """
         report_configs = ReportConfig.by_domain_and_owner(self.domain,
             self.request.couch_user._id, report_slug=self.slug).all()
         current_config_id = self.request.GET.get('config_id', '')
