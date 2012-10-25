@@ -19,7 +19,7 @@ class ProjectReport(GenericReportView):
 
     @property
     def default_report_url(self):
-        return reverse('default_report', args=[self.request.project])
+        return reverse('default_report', args=[self.report_request.project])
 
     @property
     def show_subsection_navigation(self):
@@ -155,11 +155,11 @@ class DatespanMixin(object):
     def datespan(self):
         if self._datespan is None:
             datespan = self.default_datespan
-            if self.request.datespan.is_valid() and not self.request.datespan.is_default:
-                datespan.enddate = self.request.datespan.enddate
-                datespan.startdate = self.request.datespan.startdate
+            if self.report_request.datespan.is_valid() and not self.report_request.datespan.is_default:
+                datespan.enddate = self.report_request.datespan.enddate
+                datespan.startdate = self.report_request.datespan.startdate
                 datespan.is_default = False
-            self.request.datespan = datespan
+            self.report_request.datespan = datespan
             # todo: don't update self.context here. find a better place! AGH! Sorry, sorry.
             self.context.update(dict(datespan=datespan))
             self._datespan = datespan

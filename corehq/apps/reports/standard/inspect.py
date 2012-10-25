@@ -298,7 +298,7 @@ class CaseListMixin(ProjectInspectionReportParamsMixin, GenericTabularReport, Pr
         shared_params = super(CaseListMixin, self).shared_pagination_GET_params
         shared_params.append(dict(
             name=SelectOpenCloseField.slug,
-            value=self.request.GET.get(SelectOpenCloseField.slug, '')
+            value=self.report_request.GET.get(SelectOpenCloseField.slug, '')
         ))
         return shared_params
 
@@ -351,7 +351,7 @@ class CaseListReport(CaseListMixin, ProjectInspectionReport):
                 x = ""
                 y = ""
             return cmp(x, y)
-        is_open = self.request.GET.get(SelectOpenCloseField.slug)
+        is_open = self.report_request.GET.get(SelectOpenCloseField.slug)
         filters = [CaseListFilter(self.domain, case_owner, case_type=self.case_type, open_case=is_open)
                    for case_owner in self.case_owners]
         paginator = FilteredPaginator(filters, _compare_cases)

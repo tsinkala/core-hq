@@ -68,7 +68,7 @@ class FormExportReportBase(ExportReport, DatespanMixin):
         return datespan
 
     def get_filter_params(self):
-        params = self.request.GET.copy()
+        params = self.report_request.GET.copy()
         params['startdate'] = self.datespan.startdate_display
         params['enddate'] = self.datespan.enddate_display
         return params
@@ -195,7 +195,7 @@ class ExcelExportReport(FormExportReportBase):
         context = super(ExcelExportReport, self).report_context
         context.update(
             forms=forms,
-            edit=self.request.GET.get('edit') == 'true',
+            edit=self.report_request.GET.get('edit') == 'true',
             group_exports=groups
         )
         return context
@@ -210,7 +210,7 @@ class CaseExportReport(ExportReport):
     icon = "icon-share"
 
     def get_filter_params(self):
-        return self.request.GET.copy()
+        return self.report_request.GET.copy()
 
     def get_saved_exports(self):
         startkey = json.dumps([self.domain, ""])[:-3]

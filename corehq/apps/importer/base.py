@@ -10,7 +10,7 @@ class ImportCases(DataInterface):
 
     @property
     def report_context(self):
-        error = self.request.GET.get("error", None)
+        error = self.report_request.GET.get("error", None)
         error_text=None
         if error == "nofile":
             error_text = 'Please choose an Excel file to import.'

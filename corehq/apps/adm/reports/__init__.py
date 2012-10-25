@@ -44,7 +44,7 @@ class ADMSectionView(GenericReportView):
 
     @property
     def default_report_url(self):
-        return reverse('default_adm_report', args=[self.request.project])
+        return reverse('default_adm_report', args=[self.report_request.project])
 
     @classmethod
     def get_url(cls, *args, **kwargs):

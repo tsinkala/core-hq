@@ -42,6 +42,7 @@ class ReportHttpRequest(object):
             PATH_INFO=copy.copy(request.META.get('PATH_INFO')),
         )
         self.datespan = request.datespan
+        self.project = request.project if hasattr(request, 'project') else None
 
         if request.couch_user:
             print "COUCH USER TYPE" ,type(request.couch_user)
@@ -66,17 +67,19 @@ class ReportHttpRequest(object):
             GET=self.GET,
             META=self.META,
             datespan=self.datespan,
-            couch_user_id=self.couch_user_id
+            couch_user_id=self.couch_user_id,
+            project=self.project
         )
 
     def __setstate__(self, state):
         """
-            THis unpickles the pickle
+            THis unpickles the pickle.
         """
         self.GET = state.get('GET', {})
         self.META = state.get('META', dict(QUERY_STRING="", PATH_INFO=""))
         self.datespan = state.get('datespan', DateSpan.since(7, format="%Y-%m-%d"))
         self.couch_user_id = state.get('couch_user_id')
+        self.project = state.get('project')
 
 
 class GenericReportView(object):
@@ -164,7 +167,6 @@ class GenericReportView(object):
 
         self.request = request
         self.report_request = ReportHttpRequest(self.request)
-        self.report_request.params = json_request(self.request.GET)
         self.domain = domain
         self.context = base_context or {}
         self._is_pickle = False
@@ -209,7 +211,7 @@ class GenericReportView(object):
     @property
     def url_root(self):
         if self._url_root is None:
-            path = self.request.META.get('PATH_INFO', "")
+            path = self.report_request.META.get('PATH_INFO', "")
             try:
                 root = path[0:path.index(self.slug)]
             except ValueError:
@@ -219,8 +221,8 @@ class GenericReportView(object):
 
     @property
     def queried_path(self):
-        path = self.request.META.get('PATH_INFO')
-        query = self.request.META.get('QUERY_STRING')
+        path = self.report_request.META.get('PATH_INFO')
+        query = self.report_request.META.get('QUERY_STRING')
         return "%s:%s" % (path, query)
 
     _domain_object = None
@@ -240,7 +242,7 @@ class GenericReportView(object):
                 self._timezone = pytz.utc
             else:
                 try:
-                    self._timezone = util.get_timezone(self.request.couch_user.user_id, self.domain)
+                    self._timezone = util.get_timezone(self.report_request.couch_user.user_id, self.domain)
                 except AttributeError:
                     self._timezone = util.get_timezone(None, self.domain)
         return self._timezone
@@ -343,7 +345,7 @@ class GenericReportView(object):
     def export_format(self):
         if self._export_format is None:
             from couchexport.models import Format
-            self._export_format = self.export_format_override or self.request.GET.get('format', Format.XLS)
+            self._export_format = self.export_format_override or self.report_request.GET.get('format', Format.XLS)
         return self._export_format
 
 #    _export_name = None
@@ -432,8 +434,8 @@ class GenericReportView(object):
         Whether a report has any filters set. Based on whether or not there 
         is a query string. This gets carried to additional asynchronous calls
         """
-        return string_to_boolean(self.request.GET.get("filterSet")) \
-            if "filterSet" in self.request.GET else bool(self.request.META.get('QUERY_STRING'))
+        return string_to_boolean(self.report_request.GET.get("filterSet")) \
+            if "filterSet" in self.report_request.GET else bool(self.report_request.META.get('QUERY_STRING'))
         
     
     @property
@@ -460,8 +462,8 @@ class GenericReportView(object):
             - any super intensive calculations
         """
         report_configs = ReportConfig.by_domain_and_owner(self.domain,
-            self.request.couch_user._id, report_slug=self.slug).all()
-        current_config_id = self.request.GET.get('config_id', '')
+            self.report_request.couch_user._id, report_slug=self.slug).all()
+        current_config_id = self.report_request.GET.get('config_id', '')
         default_config = ReportConfig.default()
 
         self.context.update(
@@ -478,7 +480,7 @@ class GenericReportView(object):
                 dispatcher=self.dispatcher,
                 filter_set=self.filter_set,
                 needs_filters=self.needs_filters,
-                show=self.request.couch_user.can_view_reports() or self.request.couch_user.get_viewable_reports(),
+                show=self.report_request.couch_user.can_view_reports() or self.report_request.couch_user.get_viewable_reports(),
                 is_admin=self.is_admin_report,   # todo is this necessary???
             ),
             current_config_id=current_config_id,
@@ -600,7 +602,7 @@ class GenericReportView(object):
         self.update_report_context()
 
         rendered_filters = None
-        if bool(self.request.GET.get('hq_filters')):
+        if bool(self.report_request.GET.get('hq_filters')):
             self.update_filter_context()
             rendered_filters = render_to_string(self.template_filters, self.context,
                 context_instance=RequestContext(self.request)

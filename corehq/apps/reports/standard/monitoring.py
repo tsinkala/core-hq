@@ -362,7 +362,7 @@ class CaseActivityReportCahed(WorkerMonitoringReportTable, CouchCachedReportMixi
 
     def fetch_cached_report(self):
         report = CaseActivityReportCache.get_by_domain(self.domain).first()
-        recreate = self.request.GET.get('recreate')
+        recreate = self.report_request.GET.get('recreate')
         if not report or recreate == 'yes':
             logging.info("Building new Case Activity report for project %s" % self.domain)
             report = CaseActivityReportCache.build_report(self.domain_object)

@@ -18,7 +18,7 @@ class DataInterface(GenericReportView):
 
     @property
     def default_report_url(self):
-        return reverse('data_interfaces_default', args=[self.request.project])
+        return reverse('data_interfaces_default', args=[self.report_request.project])
 
 class CaseReassignmentInterface(CaseListMixin, DataInterface):
     name = "Reassign Cases"
