@@ -482,7 +482,8 @@ create a couch doc as such:
         )
 
     @classmethod
-    def show_in_navigation(cls, request, domain=None):
+    def show_in_navigation(cls, request, *args, **kwargs):
+        domain = kwargs.get('domain')
         if cls.get_config(domain):
             return True
         else:

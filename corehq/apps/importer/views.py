@@ -82,8 +82,7 @@ def excel_config(request, domain):
         else:
             messages.error(request, _('Please choose an Excel file to import.'))
     #TODO show bad/invalid file error on this page
-    return HttpResponseRedirect(base.ImportCases.get_url(domain=domain))
-
+    return HttpResponseRedirect(base.ImportCases.get_url(domain))
       
 @require_POST
 @require_can_edit_data
@@ -187,7 +186,7 @@ def excel_commit(request, domain):
         messages.error(request, _('The session containing the file you '
                                   'uploaded has expired - please upload '
                                   'a new one.'))
-        return HttpResponseRedirect(base.ImportCases.get_url(domain=domain) + "?error=cache")
+        return HttpResponseRedirect(base.ImportCases.get_url(domain) + "?error=cache")
     
     columns = spreadsheet.get_header_columns()        
     

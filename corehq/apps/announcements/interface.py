@@ -1,7 +1,7 @@
 from django.core.urlresolvers import reverse
 from corehq.apps.announcements.dispatcher import HQAnnouncementAdminInterfaceDispatcher
-from corehq.apps.announcements.forms import HQAnnouncementForm, ReportAnnouncementForm
-from corehq.apps.announcements.models import HQAnnouncement, ReportAnnouncement
+from corehq.apps.announcements.forms import HQAnnouncementForm
+from corehq.apps.announcements.models import HQAnnouncement
 from corehq.apps.crud.interface import BaseCRUDAdminInterface
 from corehq.apps.reports.datatables import DataTablesHeader, DataTablesColumn
 
@@ -25,6 +25,7 @@ class BaseHQAnnouncementsAdminInterface(BaseCRUDAdminInterface):
         return DataTablesHeader(
             DataTablesColumn("Title"),
             DataTablesColumn("Summary"),
+            DataTablesColumn("Highlighted CSS Selectors"),
             DataTablesColumn("Date Created"),
             DataTablesColumn("Valid Until"),
             DataTablesColumn("Edit"),
@@ -58,16 +59,6 @@ class ManageGlobalHQAnnouncementsInterface(BaseHQAnnouncementsAdminInterface):
     form_class = HQAnnouncementForm
 
     crud_item_type = "Global Announcement"
-
-class ManageReportAnnouncementsInterface(BaseHQAnnouncementsAdminInterface):
-    name = "Manage Report Announcements"
-    description = "Create Report Announcements Here"
-    slug = "report_announcements"
-
-    document_class = ReportAnnouncement
-    form_class = ReportAnnouncementForm
-
-    crud_item_type = "Report Announcement"
 
 
 

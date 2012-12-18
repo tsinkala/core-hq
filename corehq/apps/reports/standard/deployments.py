@@ -4,7 +4,6 @@ from corehq.apps.reports.standard import ProjectReportParametersMixin, ProjectRe
 from corehq.apps.reports.datatables import DataTablesHeader, DataTablesColumn, DTSortType
 from corehq.apps.reports.fields import SelectApplicationField
 from corehq.apps.reports.generic import GenericTabularReport
-from corehq.apps.reports.util import make_form_couch_key
 from couchforms.models import XFormInstance
 from django.utils.translation import ugettext_noop
 from django.utils.translation import ugettext as _
@@ -39,14 +38,15 @@ class ApplicationStatusReport(DeploymentsReport):
             version = "---"
             app_name = "---"
             is_unknown = True
-            key = make_form_couch_key(self.domain, user_id=user.get('user_id'))
-            data = XFormInstance.view("reports_forms/all_forms",
-                startkey=key+[{}],
-                endkey=key,
+            
+            endkey = [self.domain, user.get('user_id')]
+            startkey = [self.domain, user.get('user_id'), {}]
+            data = XFormInstance.view("reports/last_seen_submission",
+                startkey=startkey,
+                endkey=endkey,
                 include_docs=True,
                 descending=True,
-                reduce=False
-            ).first()
+                reduce=False).first()
 
             if data:
                 last_seen = util.format_relative_date(data.received_on)

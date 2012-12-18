@@ -5,7 +5,6 @@ from django.http import Http404
 from corehq.apps.reports.standard import ProjectReportParametersMixin, ProjectReport, DatespanMixin
 from corehq.apps.reports.models import FormExportSchema,\
     HQGroupExportConfiguration
-from corehq.apps.reports.util import make_form_couch_key
 from couchexport.models import SavedExportSchema, Format
 from dimagi.utils.couch.database import get_db
 from corehq.apps.app_manager.models import get_app
@@ -33,7 +32,6 @@ class FormExportReportBase(ExportReport, DatespanMixin):
     fields = ['corehq.apps.reports.fields.FilterUsersField',
               'corehq.apps.reports.fields.GroupField',
               'corehq.apps.reports.fields.DatespanField']
-
     def get_saved_exports(self):
         # add saved exports. because of the way in which the key is stored
         # (serialized json) this is a little bit hacky, but works.
@@ -53,14 +51,13 @@ class FormExportReportBase(ExportReport, DatespanMixin):
             try:
                 def clip_timezone(datestring):
                     return datestring[:len('yyyy-mm-ddThh:mm:ss')]
-                return string_to_datetime(clip_timezone(x['key'][2]))
+                return string_to_datetime(clip_timezone(x['key'][1]))
             except Exception:
                 logging.error("Tried to get a date from this, but it didn't work: %r" % x)
                 return None
-        key = make_form_couch_key(self.domain)
-        startdate = get_db().view('reports_forms/all_forms',
-            startkey=key,
-            endkey=key+[{}],
+        startdate = get_db().view('reports/all_submissions',
+            startkey=[self.domain],
+            endkey=[self.domain,{}],
             limit=1,
             descending=False,
             reduce=False,
@@ -88,7 +85,7 @@ class ExcelExportReport(FormExportReportBase):
         # However, we want to separate out by (app_id, xmlns) pair not just xmlns so we use [domain] to [domain, {}]
         forms = []
         unknown_forms = []
-        for f in get_db().view('exports_forms/by_xmlns', startkey=[self.domain], endkey=[self.domain, {}], group=True):
+        for f in get_db().view('reports/forms_by_xmlns', startkey=[self.domain], endkey=[self.domain, {}], group=True):
             form = f['value']
             if form.get('app_deleted') and not form.get('submissions'):
                 continue
@@ -107,7 +104,7 @@ class ExcelExportReport(FormExportReportBase):
             forms.append(form)
 
         if unknown_forms:
-            apps = get_db().view('exports_forms/by_xmlns',
+            apps = get_db().view('reports/forms_by_xmlns',
                 startkey=['^Application', self.domain],
                 endkey=['^Application', self.domain, {}],
                 reduce=False,
@@ -244,7 +241,8 @@ class DeidExportReport(FormExportReportBase):
     report_template_path = 'reports/reportdata/form_deid_export.html'
 
     @classmethod
-    def show_in_navigation(cls, request, domain=None):
+    def show_in_navigation(cls, request, *args, **kwargs):
+        domain = kwargs.get('domain')
         startkey = json.dumps([domain, ""])[:-3]
         return SavedExportSchema.view("couchexport/saved_export_schemas",
             startkey=startkey,
