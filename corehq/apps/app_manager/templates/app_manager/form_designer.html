@@ -77,15 +77,13 @@
                 staticPrefix: '/static/formdesigner/',
                 iconUrl: '/static/hqwebapp/javascripts/jquery-ui/images/ui-icons_469bdd_256x240.png',
                 saveUrl: '{% url edit_form_attr domain app.id form.get_unique_id "xform" %}',
-                patchUrl: '{% url patch_xform domain app.id form.get_unique_id %}',
-                saveType: 'patch',
                 form: {{ form.source|JSON }},
                 langs: {{ app.langs|JSON }},
                 formName: "{{ form.name|trans:app.langs }}",
                 displayLanguage: {{ lang|JSON }}
             });
             formdesigner.on('form-saved', function (args) {
-                var response = args.response;
+                var response = JSON.parse(args.response);
                 COMMCAREHQ.app_manager.updateDOM(response.update);
             });
         });

@@ -185,7 +185,7 @@ class ProjectSettingsMenuItem(DropdownMenuItem):
     @property
     @memoized
     def url(self):
-        return _redirect_users_to(self.request, self.domain) or reverse("homepage")
+        return _redirect_users_to(self.request, self.domain)
 
     @property
     @memoized
@@ -200,7 +200,7 @@ class ProjectSettingsMenuItem(DropdownMenuItem):
 
     @classmethod
     def is_viewable(cls, request, domain):
-        return domain is not None and request.couch_user
+        return domain is not None
 
 
 

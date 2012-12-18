@@ -582,7 +582,6 @@ class DjangoUserMixin(DocumentSchema):
         dummy.password = self.password
         return dummy.check_password(password)
 
-
 class CouchUser(Document, DjangoUserMixin, IsMemberOfMixin, UnicodeMixIn):
     """
     A user (for web and commcare)
@@ -612,10 +611,6 @@ class CouchUser(Document, DjangoUserMixin, IsMemberOfMixin, UnicodeMixIn):
 
     class InvalidID(Exception):
         pass
-
-    @property
-    def is_dimagi(self):
-        return self.username.endswith('@dimagi.com')
 
     @property
     def raw_username(self):
@@ -1026,7 +1021,7 @@ class CommCareUser(CouchUser, CommCareMobileContactMixin, SingleMembershipMixin)
             should_save = True
         self = super(CommCareUser, cls).wrap(data)
         if should_save:
-            self.domain_membership = DomainMembership(domain=data.get('domain', ""))
+            self.domain_membership = DomainMembership(domain=self.domain)
             if role_id:
                 self.domain_membership.role_id = role_id
 #            self.save() # will uncomment when I figure out what's happening with sheels commcareuser
@@ -1350,7 +1345,6 @@ class CommCareUser(CouchUser, CommCareMobileContactMixin, SingleMembershipMixin)
             # Gracefully handle when user_data is None, or does not have a "language_code" entry
             lang = None
         return lang
-
 
 class WebUser(CouchUser, MultiMembershipMixin):
     teams = StringListProperty()
