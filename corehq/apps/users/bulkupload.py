@@ -268,7 +268,7 @@ def dump_users_and_groups(response, domain):
             'data': group.metadata,
         })
         group_data_keys.update(group.metadata.keys())
-g
+
     # include blank password column for adding new users
     user_headers = ['username', 'password', 'name', 'phone-number', 'language']
     user_headers.extend(json_to_headers(
