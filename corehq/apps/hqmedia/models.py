@@ -2,24 +2,78 @@ from StringIO import StringIO
 from PIL import Image
 from datetime import datetime
 import hashlib
-from couchdbkit.exceptions import ResourceConflict
+from couchdbkit.exceptions import ResourceConflict, ResourceNotFound
 from couchdbkit.ext.django.schema import *
+from django.contrib import messages
 from django.core.urlresolvers import reverse
 import magic
 from hutch.models import AuxMedia, AttachmentImage, MediaAttachmentManager
+from corehq.apps import domain
+from corehq.apps.domain.models import LICENSES
+from dimagi.utils.couch.database import get_db
+from django.utils.translation import ugettext as _
 
 class HQMediaType(object):
     IMAGE = 0
     AUDIO = 1
     names = ["image", "audio"]
 
-class CommCareMultimedia(Document):
+class HQMediaLicense(DocumentSchema):
+    domain = StringProperty()
+    author = StringProperty()
+    organization = StringProperty()
+    type = StringProperty(choices=LICENSES)
+    attribution_notes = StringProperty()
 
+    def __init__(self, _d=None, **properties):
+        # another place we have to lazy migrate
+        if properties and properties.get('type', '') == 'public':
+            properties['type'] = 'cc'
+        super(HQMediaLicense, self).__init__(_d, **properties)
+    
+    @property
+    def display_name(self):
+        return LICENSES.get(self.type, "Improper License")
+
+class CommCareMultimedia(Document):
     file_hash = StringProperty()
     aux_media = SchemaListProperty(AuxMedia)
-    tags = StringListProperty()
+
     last_modified = DateTimeProperty()
-    valid_domains = StringListProperty()
+    valid_domains = StringListProperty() # appears to be mostly unused as well - timbauman
+    # add something about context from the form(s) its in
+
+    owners = StringListProperty(default=[])
+    licenses = SchemaListProperty(HQMediaLicense, default=[])
+    shared_by = StringListProperty(default=[])
+    tags = DictProperty(default={}) # dict of string lists
+
+    @classmethod
+    def wrap(cls, data):
+        should_save = False
+        if data.get('tags') == []:
+            data['tags'] = {}
+        if not data.get('owners'):
+            data['owners'] = data.get('valid_domains', [])
+        if isinstance(data.get('licenses', ''), dict):
+            # need to migrate licncses from old format to new format
+            # old: {"mydomain": "public", "yourdomain": "cc"}
+            migrated = [HQMediaLicense(domain=domain, type=type)._doc \
+                        for domain, type in data["licenses"].items()]
+            data['licenses'] = migrated
+
+        # deprecating support for public domain license
+        if isinstance(data.get("licenses", ""), list) and len(data["licenses"]) > 0:
+            if data["licenses"][0].get("type", "") == "public":
+                data["licenses"][0]["type"] = "cc"
+                should_save = True
+
+        self = super(CommCareMultimedia, cls).wrap(data)
+
+        if should_save:
+            self.save()
+
+        return self
 
     def attach_data(self, data, upload_path=None, username=None, attachment_id=None,
                     media_meta=None, replace_attachment=False):
@@ -48,10 +102,32 @@ class CommCareMultimedia(Document):
             self.aux_media.append(new_media)
         self.save()
 
-    def add_domain(self, domain):
+    def add_domain(self, domain, owner=None, **kwargs):
+
+        if len(self.owners) == 0:
+            # this is intended to simulate migration--if it happens that a media file somehow gets no more owners
+            # (which should be impossible) it will transfer ownership to all copiers... not necessarily a bad thing,
+            # just something to be aware of
+            self.owners = self.valid_domains
+
+        if owner and domain not in self.owners:
+            self.owners.append(domain)
+        elif owner == False and domain in self.owners:
+            self.owners.remove(domain)
+
+        if domain in self.owners:
+            shared = kwargs.get('shared', '')
+            if shared and domain not in self.shared_by:
+                self.shared_by.append(domain)
+            elif not shared and shared != '' and domain in self.shared_by:
+                self.shared_by.remove(domain)
+
+            if kwargs.get('tags', ''):
+                self.tags[domain] = kwargs['tags']
+
         if domain not in self.valid_domains:
             self.valid_domains.append(domain)
-            self.save()
+        self.save()
 
     def get_display_file(self, return_type=True):
         all_ids = self.current_attachments
@@ -89,14 +165,64 @@ class CommCareMultimedia(Document):
     def get_by_data(cls, data):
         file_hash = cls.generate_hash(data)
         media = cls.get_by_hash(file_hash)
+        media.save()
         return media
 
     @classmethod
     def validate_content_type(cls, content_type):
         return True
 
+    @classmethod
+    def get_all(cls):
+        return cls.view('hqmedia/by_doc_type', key=cls.__name__, include_docs=True)
+
+    @classmethod
+    def all_tags(cls):
+        return [d['key'] for d in cls.view('hqmedia/tags', group=True).all()]
+
+    def url(self):
+        return reverse("hqmedia_download", args=[self.doc_type,
+                                                 self._id])
+
+    @property
+    def is_shared(self):
+        return len(self.shared_by) > 0
+
+    @classmethod
+    def search(cls, query, limit=10):
+        results = get_db().search(cls.Config.search_view, q=query, limit=limit, stale='ok')
+        return map(cls.get, [r['id'] for r in results])
+
+    @property
+    def license(self):
+        return self.licenses[0] if self.licenses else None
+
+    def update_or_add_license(self, domain, type="", author="", attribution_notes="", org=""):
+        for license in self.licenses:
+            if license.domain == domain:
+                license.type = type or license.type
+                license.author = author or license.author
+                license.organization = org or license.organization
+                license.attribution_notes = attribution_notes or license.attribution_notes
+                break
+        else:
+            license = HQMediaLicense(   domain=domain, type=type, author=author,
+                                        attribution_notes=attribution_notes, organization=org)
+            self.licenses.append(license)
+
+        self.save()
+
+    @classmethod
+    def get_doc_class(self, doc_type):
+        return {
+            'CommCareImage': CommCareImage,
+            'CommCareAudio': CommCareAudio
+        }[doc_type]
 
 class CommCareImage(CommCareMultimedia):
+
+    class Config(object):
+        search_view = 'hqmedia/image_search'
 
     def attach_data(self, data, upload_path=None, username=None, attachment_id=None, media_meta=None, replace_attachment=False):
         image = Image.open(StringIO(data))
@@ -117,9 +243,14 @@ class CommCareImage(CommCareMultimedia):
         
 class CommCareAudio(CommCareMultimedia):
 
+    class Config(object):
+        search_view = 'hqmedia/audio_search'
+
     @classmethod
     def validate_content_type(cls, content_type):
         return content_type in ['audio/mpeg', 'audio/mp3']
+
+
 
 class HQMediaMapItem(DocumentSchema):
 
@@ -148,6 +279,7 @@ class HQMediaMixin(Document):
         map_item.multimedia_id = multimedia._id
         map_item.media_type = multimedia.doc_type
         self.multimedia_map[form_path] = map_item
+
         try:
             self.save()
         except ResourceConflict:
@@ -155,12 +287,16 @@ class HQMediaMixin(Document):
             updated_doc = self.get(self._id)
             updated_doc.create_mapping(multimedia, form_path)
 
-    def get_map_display_data(self):
+    def get_media_documents(self):
         for form_path, map_item in self.multimedia_map.items():
-            media = eval(map_item.media_type)
-            media = media.get(map_item.multimedia_id)
+            media = CommCareMultimedia.get_doc_class(map_item.media_type)
+            try:
+                media = media.get(map_item.multimedia_id)
+            except ResourceNotFound:
+                media = None
+            yield form_path, media
 
-    def get_template_map(self, sorted_files):
+    def get_template_map(self, sorted_files, req=None):
         product = []
         missing_refs = 0
         multimedia_map = self.multimedia_map
@@ -175,4 +311,14 @@ class HQMediaMixin(Document):
                 missing_refs += 1
             except AttributeError:
                 pass
+            except UnicodeEncodeError:
+                if req:
+                    messages.error(req, _("This application has unsupported text in one of it's media file label fields ")) #what should this say
+                else:
+                    pass
         return product, missing_refs
+
+    def clean_mapping(self, user=None):
+        for path, media in self.get_media_documents():
+            if not media or (not media.is_shared and self.domain not in media.owners):
+                del self.multimedia_map[path]

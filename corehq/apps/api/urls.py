@@ -1,11 +1,23 @@
-from corehq.apps.api.resources import CommCareUserResource, CommCareCaseResource
+from corehq.apps.api.resources import v0_1, v0_2, v0_3
+from corehq.apps.locations.resources.v0_1 import LocationResource
 from django.conf.urls.defaults import *
 from tastypie.api import Api
+from dimagi.utils.decorators import inline
 
-v0_1_api = Api(api_name=r'v0\.1')
-v0_1_api.register(CommCareUserResource())
-v0_1_api.register(CommCareCaseResource())
+API_LIST = (
+    ((0, 1), (v0_1.CommCareUserResource, v0_1.CommCareCaseResource, v0_1.XFormInstanceResource, LocationResource)),
+    ((0, 2), (v0_1.CommCareUserResource, v0_2.CommCareCaseResource, v0_1.XFormInstanceResource, LocationResource)),
+    ((0, 3), (v0_1.CommCareUserResource, v0_3.CommCareCaseResource, v0_1.XFormInstanceResource, LocationResource))
+)
+
+@inline
+def api_url_patterns():
+    for version, resources in API_LIST:
+        api = Api(api_name=r'v%d\.%d' % version)
+        for R in resources:
+            api.register(R())
+        yield (r'^', include(api.urls))
 
 urlpatterns = patterns('',
-    (r'^', include(v0_1_api.urls)),
+    *api_url_patterns
 )

@@ -8,13 +8,21 @@
 
 
 {% block head %}{{ block.super }}
-    <link rel="stylesheet" href="{% static 'hq_bootstrap/css/old/app_manager.css' %}"/>
+    <link rel="stylesheet" href="{% static 'hqstyle/css/legacy/app_manager.css' %}"/>
     {% include "imports/jqmodal.html" %}
     <link href="{% static 'formdesigner/css/chosen.css' %}" rel="stylesheet" />
     <style>
         .hq-oldstyle .nav-pills .active > a {
             color: white;
             background-color: #1557A2;
+        }
+        /* stupid hacks to make bootstrap btns not look bad */
+        .hq-oldstyle a.btn {
+            text-decoration: none;
+            color: black; /* i think this is the wrong color - maybe like #CCC or something is right? */
+        }
+        .hq-oldstyle a.btn-primary, .hq-oldstyle a.btn-info {
+            color: white;
         }
         #release-manager-nav {
             float: right;
@@ -25,7 +33,6 @@
 {% block js %}{{ block.super }}
     <script src="{% static 'hqwebapp/js/ui-element.js' %}"></script>
     <script src="{% static 'langcodes/js/langcodes.js' %}"></script>
-    <script src="{% static 'hqwebapp/js/dropdown.js' %}"></script>
     <script src="{% static 'app_manager/js/app_manager.js' %}"></script>
     <script src="{% static 'hqwebapp/javascripts/jquery.textchange.min.js' %}"></script>
     <script src="{% static 'formdesigner/js/chosen.jquery.min.js' %}"></script>
@@ -54,10 +61,17 @@
         }).on('hide', function () {
             window.location = "{% url corehq.apps.app_manager.views.default domain %}";
         });
-    });
-    $(function() {
-        $('#odk-install-placeholder').jqm({ajax: '@href', trigger: 'a.odk_install', 
-                                   ajaxText: "Please wait while we load that for you..." });
+        $('.hq-help-template').each(function () {
+            var el = $(
+              '<a href="#" class="hq-help no-click">' +
+              '<i class="icon-question-sign" data-trigger="hover"></i></a>'
+            ).insertAfter(this);
+            for (var attr in {'content': 0, 'title': 0}) {
+                $('i', el).data(attr, $(this).data(attr));
+            }
+            $(this).remove();
+        });
+        $('.hq-help').hqHelp();
     });
     $(function() {
         var hidden,
@@ -90,8 +104,6 @@
             setHidden(!hidden);
             return false;
         });
-        $("#new_app_menu").dropdown();
-        $(".download-dropdown").each(function () { $(this).dropdown(); });
         if(hidden) {
             $appsMenu.hide();
         } else if (bootstrap) {
@@ -136,7 +148,6 @@
 
 {% block content %}
     <input type="hidden" name="edit_mode" value="{% if edit %}true{% else %}false{% endif %}" />
-    {% comment %}{% include "sms/partials/sms_autocomplete.html" %}{% endcomment %}
     <div id="main_container">
 
         {% if app %}
@@ -161,21 +172,15 @@
                             <ul class="dropdown-menu">
                                 <li class="form" data-action="{% url corehq.apps.app_manager.views.new_app domain %}" data-method="post">
                                     <input type="hidden" name="type" value="Application" />
-                                    <input type="hidden" name="application_version" value="1.0" />
-                                    <a href="#" class="submit">{% trans 'Blank Application' %}</a>
-                                </li>
-                                <li class="form" data-action="{% url corehq.apps.app_manager.views.import_app domain %}" data-method="post">
-                                    <input type="hidden" name="app_id" value="example--hello-world"/>
-                                    <a href="#" class="submit">{% trans 'From Example: Hello World' %}</a>
-                                </li>
-                                <li class="form" data-action="{% url corehq.apps.app_manager.views.new_app domain %}" data-method="post">
-                                    <input type="hidden" name="type" value="Application" />
                                     <input type="hidden" name="application_version" value="2.0" />
-                                    <a href="#" class="submit">{% trans 'Blank 2.x Application (Advanced Users Only)' %}</a>
+                                    <a href="#" class="submit">{% trans 'Blank Application' %}</a>
                                 </li>
                                 <li class="form" data-action="{% url corehq.apps.app_manager.views.new_app domain %}" data-method="post">
                                     <input type="hidden" name="type" value="RemoteApp" />
                                     <a href="#" class="submit">{% trans 'Remote App (Advanced Users Only)' %}</a>
+                                </li>
+                                <li>
+                                    <a href="{% url appstore %}">{% trans 'Visit CommCare Exchange to copy existing app...' %}</a>
                                 </li>
                             </ul>
                         </div>
@@ -227,7 +232,7 @@
             </div>
             {% if applications and request.couch_user.can_edit_apps %}
                 <div id="edit">
-                    Switch to: 
+                    Switch to:
                     {% if edit %}
                         <a href="{% urlencode request.path request.GET with "edit" as "false" %}">
                             Read Only
@@ -240,7 +245,7 @@
                 </div>
             {% endif %}
         </div>
-        <div>
+        <div id="app-content">
             {% block app-content %}
             {% endblock %}
         </div>
@@ -251,12 +256,15 @@
                 </p>
                 <form action="{% url new_app domain %}">
                     <input type="hidden" name="type" value="Application">
-                    <a href="#" class="submit">Click here to create your first app.</a>
+                    <input type="hidden" name="application_version" value="2.0" />
+                    {% if request.couch_user.can_edit_apps %}
+                    <a href="#" class="submit">Create a blank app</a>
+                    {% else %}
+                    There are no applications at this time
+                    {% endif %}
+                    or <a href="{% url appstore %}">copy an existing app from CommCare Exchange</a>.
                 </form>
             </div>
         {% endif %}
-    </div>
-    <div class="jqmWindow" id="odk-install-placeholder">
-    Please wait while that loads... 
     </div>
 {% endblock %}

@@ -114,12 +114,20 @@ class FixtureDataItem(Document):
         return self.get_users(wrap=wrap, include_groups=True)
 
     @classmethod
-    def by_user(cls, user, wrap=True):
+    def by_user(cls, user, wrap=True, domain=None):
         group_ids = Group.by_user(user, wrap=False)
+
+
+        if isinstance(user, dict):
+            user_id = user.get('user_id')
+            user_domain = domain
+        else:
+            user_id = user.user_id
+            user_domain = user.domain
 
         fixture_ids = set(
             get_db().view('fixtures/ownership',
-                keys=[['data_item by user', user.domain, user.user_id]] + [['data_item by group', user.domain, group_id] for group_id in group_ids],
+                keys=[['data_item by user', user_domain, user_id]] + [['data_item by group', user_domain, group_id] for group_id in group_ids],
                 reduce=False,
                 wrapper=lambda r: r['value'],
             )
@@ -130,11 +138,21 @@ class FixtureDataItem(Document):
             return fixture_ids
 
     @classmethod
+    def by_group(cls, group, wrap=True):
+        fixture_ids = get_db().view('fixtures/ownership',
+            key=['data_item by group', group.domain, group.get_id],
+            reduce=False,
+            wrapper=lambda r: r['value'],
+        ).all()
+
+        return cls.view('_all_docs', keys=list(fixture_ids), include_docs=True) if wrap else fixture_ids
+
+    @classmethod
     def by_data_type(cls, domain, data_type):
         if isinstance(data_type, basestring):
             data_type_id = data_type
         else:
-            data_type_id = data_type.get_id
+            data_type_id = data_type.get_id if data_type else None
         return cls.view('fixtures/data_items_by_domain_type', key=[domain, data_type], reduce=False, include_docs=True)
 
 class FixtureOwnership(Document):

@@ -1,19 +1,29 @@
+
+import json
 from collections import defaultdict
-from corehq.apps.domain.decorators import require_superuser
-from dimagi.utils.couch.undo import DELETED_SUFFIX
-from dimagi.utils.make_uuid import random_hex
+from couchdbkit.exceptions import ResourceNotFound
+
 from django.contrib import messages
 from django.core.urlresolvers import reverse
-from django.http import HttpResponseRedirect
-import json
-from django.views.decorators.http import require_POST
-from casexml.apps.case.models import CommCareCase
-from corehq.apps.users.decorators import require_permission
-from corehq.apps.users.models import CommCareUser, Permissions
-from couchforms.models import XFormInstance
+from django.http import HttpResponseRedirect, HttpResponse
+from django.views.decorators.http import require_POST, require_GET
+from corehq.apps.reports.util import make_form_couch_key
+
+from dimagi.utils.couch.undo import DELETED_SUFFIX
+from dimagi.utils.decorators.memoized import memoized
+from dimagi.utils.make_uuid import random_hex
 from dimagi.utils.couch.database import get_db
 from dimagi.utils.web import render_to_response, json_request, json_response
+
+from casexml.apps.case.models import CommCareCase
+
+from corehq.apps.domain.decorators import require_superuser
+from corehq.apps.groups.models import Group
+from corehq.apps.users.decorators import require_permission
+from corehq.apps.users.models import CommCareUser, Permissions
 from corehq.apps.receiverwrapper.util import get_submit_url
+
+from couchforms.models import XFormInstance
 
 require_can_cleanup = require_permission(Permissions.edit_data)
 
@@ -45,32 +55,34 @@ def submissions_json(request, domain):
             total = len(subs)
         else:
             if userID is None:
-                subs = XFormInstance.view('reports/all_submissions',
-                    startkey=[domain, {}],
-                    endkey=[domain],
+                key = make_form_couch_key(domain)
+                subs = XFormInstance.view('reports_forms/all_forms',
+                    startkey=key+[{}],
+                    endkey=key,
                     reduce=False,
                     include_docs=True,
                     descending=True,
                     limit=limit
                 )
-                total = get_db().view('reports/all_submissions',
-                    startkey=[domain],
-                    endkey=[domain, {}],
+                total = get_db().view('reports_forms/all_forms',
+                    startkey=key,
+                    endkey=key+[{}],
                     group_level=1
                 ).one()
                 total = total['value'] if total else 0
             else:
-                subs = XFormInstance.view('reports/submit_history',
-                    startkey=[domain, userID, {}],
-                    endkey=[domain, userID],
+                key = make_form_couch_key(domain, user_id=userID)
+                subs = XFormInstance.view('reports_forms/all_forms',
+                    startkey=key+[{}],
+                    endkey=key,
                     reduce=False,
                     include_docs=True,
                     descending=True,
                     limit=limit
                 )
-                total = get_db().view('reports/submit_history',
-                    startkey=[domain, userID],
-                    endkey=[domain, userID, {}],
+                total = get_db().view('reports_forms/all_forms',
+                    startkey=key,
+                    endkey=key+[{}],
                     group_level=2
                 ).one()
                 total = total['value'] if total else 0
@@ -121,7 +133,7 @@ def relabel_submissions(request, domain):
         case.user_id = userID
         case.save()
 
-    
+
     return HttpResponseRedirect(reverse('corehq.apps.cleanup.views.submissions', args=[domain]))
 
 # -----------cases-------------
@@ -130,7 +142,7 @@ def relabel_submissions(request, domain):
 def cases(request, domain, template="cleanup/cases.html"):
     return render_to_response(request, template, {'domain': domain})
 
-@require_can_cleanup 
+@require_can_cleanup
 def cases_json(request, domain):
     def query(stale="ok", **kwargs):
         subs = [dict(
@@ -180,7 +192,7 @@ def cases_json(request, domain):
         })
     return query(**json_request(request.GET))
 
-@require_can_cleanup 
+@require_can_cleanup
 @require_POST
 def close_cases(request, domain):
     data = json.loads(request.POST['data'])
@@ -207,8 +219,8 @@ def _get_submissions(domain, keys):
 
 def _get_cases(xforms):
     cases = []
-    for case in CommCareCase.view('case/by_xform_id', 
-                                  keys=[xform.get_id for xform in xforms], 
+    for case in CommCareCase.view('case/by_xform_id',
+                                  keys=[xform.get_id for xform in xforms],
                                   reduce=False, include_docs=True).all():
         cases.append(case)
     return cases
@@ -221,7 +233,7 @@ def change_submissions_app_id(request, domain):
     new_app_id = request.POST['new_app_id']
     next = request.POST['next']
 
-    submissions = XFormInstance.view('reports/forms_by_xmlns',
+    submissions = XFormInstance.view('exports_forms/by_xmlns',
         key=['^XFormInstance', domain, app_id, xmlns],
         include_docs=True,
         reduce=False,
@@ -241,9 +253,10 @@ def delete_all_data(request, domain, template="cleanup/delete_all_data.html"):
         return render_to_response(request, template, {
             'domain': domain
         })
-    xforms = XFormInstance.view('reports/all_submissions',
-        startkey=[domain],
-        endkey=[domain, {}],
+    key = make_form_couch_key(domain)
+    xforms = XFormInstance.view('reports_forms/all_forms',
+        startkey=key,
+        endkey=key+[{}],
         include_docs=True,
         reduce=False
     )
@@ -261,3 +274,59 @@ def delete_all_data(request, domain, template="cleanup/delete_all_data.html"):
             thing['-deletion_id'] = deletion_id
             thing.save()
     return HttpResponseRedirect(reverse('homepage'))
+
+# ----bihar migration----
+@require_GET
+@require_can_cleanup
+def reassign_cases_to_correct_owner(request, domain, template='cleanup/reassign_cases_to_correct_owner.html'):
+    log = {'unaffected': [], 'affected': [], 'unsure': []}
+    @memoized
+    def get_correct_group_id(user_id, group_id):
+        group_ids = [group.get_id for group in Group.by_user(user_id) if group.case_sharing]
+        if group_id in group_ids:
+            return group_id
+        else:
+            try:
+                g, = group_ids
+                return g
+            except ValueError:
+                # too many values to unpack
+                return None
+    @memoized
+    def get_meta(id):
+        try:
+            doc = get_db().get(id)
+        except (ResourceNotFound, AttributeError):
+            return {'name': None, 'doc_type': None}
+        return {
+            'name': {
+                'CommCareUser': lambda user: CommCareUser.wrap(user).raw_username,
+                'WebUser': lambda user: user['username'],
+                'Group': lambda group: group['name']
+            }.get(doc['doc_type'], lambda x: None)(doc),
+            'doc_type': doc['doc_type']
+        }
+
+    for case in CommCareCase.view('hqcase/all_cases', startkey=[domain, {}, {}], endkey=[domain, {}, {}, {}], include_docs=True, reduce=False):
+        group_id = get_correct_group_id(case.user_id, case.owner_id)
+        case_data = {
+            'case': {'id': case.case_id, 'meta': {'name': case.name, 'doc_type': case.doc_type}, 'modified': case.modified_on},
+            'user': {'id': case.user_id, 'meta': get_meta(case.user_id)},
+            'owner': {'id': case.owner_id, 'meta': get_meta(case.owner_id)},
+            'suggested': {'id': group_id, 'meta': get_meta(group_id)},
+        }
+        if group_id:
+            if group_id != case.owner_id:
+                log['affected'].append(case_data)
+#            else:
+#                log['unaffected'].append(case_data)
+#        else:
+#            log['unsure'].append(case_data)
+
+    if request.GET.get('ajax'):
+        return json_response(log)
+    else:
+        return render_to_response(request, template, {
+            'domain': domain,
+            'results': log
+        })

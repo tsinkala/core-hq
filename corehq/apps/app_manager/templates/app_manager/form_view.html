@@ -1,27 +1,8 @@
 {% extends "app_manager/managed_app.html" %}
 {% load xforms_extras %}
 {% load hq_shared_tags %}
-
+{% load i18n %}
 {% block js-inline %}{{ block.super }}
-<script type="text/javascript">
-    $(function(){
-        var help_text = {
-            "Cases and Referrals":"Cases and referrals are a way of preserving information across multiple interactions with CommCare on the mobile phone.",
-            "Child Cases": ("Child Cases let you open other types of cases for use in other modules. " +
-                "When possible, they'll be linked to the current case so you'll always know where they came from. " +
-                "A great use of Child Cases is for tracking a newborn separately from its mother.")
-        };
-        $('.help_popover').popover({
-            placement: $(this).data('placement') || 'right',
-            title: function () {
-                return $(this).attr('data-help-key');
-            },
-            content: function () {
-                return help_text[$(this).attr('data-help-key')];
-            }
-        });
-    });
-</script>
 {% endblock %}
 {% block js %}{{ block.super }}
     <script src="{% static 'hqwebapp/javascripts/knockout.mapping.js' %}"></script>
@@ -89,7 +70,8 @@
                 home: 'langcode_validator',
                 langcodes: {{ xform_languages|JSON }},
                 edit: edit,
-                renameURL: "{% url corehq.apps.app_manager.views.rename_language app.domain form.unique_id %}",
+                renameURL: "{% url corehq.apps.app_manager.views.rename_language app.domain form.get_unique_id %}",
+                validateURL: "{% url corehq.apps.app_manager.views.validate_language app.domain app.id %}"
             });
             var form_empty = {% if form.source %}false{% else %}true{% endif %};
         {% if is_user_registration %}
@@ -179,7 +161,6 @@
                     edit: edit,
                     save_url: "{% url corehq.apps.app_manager.views.edit_form_actions app.domain app.id module.id nav_form.id %}",
                     requires: "{{ form.requires }}",
-{#                    save_requires_url: "{% url corehq.apps.app_manager.views.edit_form_attr domain app.id form.get_unique_id  'requires' %}",#}
                     reserved_words: {{ case_reserved_words_json|JSON }},
                     moduleCaseTypes: {{ module_case_types|JSON }},
                     caseType: {{ form.get_case_type|JSON }}
@@ -188,7 +169,7 @@
 
                 // tag the 'preview in cloudcare' button with the right url
                 // unfortunately, has to be done in javascript
-                var cloudCareUrl = getCloudCareUrl("{% url cloudcare_app_list domain '' %}", "{{ app.id }}", "{{ module.id }}", "{{ nav_form.id }}") + "?preview=true";
+                var cloudCareUrl = getCloudCareUrl("{% url cloudcare_main domain '' %}", "{{ app.id }}", "{{ module.id }}", "{{ nav_form.id }}") + "?preview=true";
                 $("#cloudcare-preview-url").attr("href", cloudCareUrl);
             }
         {% endif %}
@@ -281,9 +262,9 @@
         </div>
     {% endif %}
     {% if is_user_registration %}
-        <h3>User Registration</h3>
+        <h3 class="app-manager-title">User Registration</h3>
     {% else %}
-        <h3 class="variable-form_name">{{ form.name|html_trans:langs|safe }}</h3>
+        <h3 class="app-manager-title variable-form_name">{{ form.name|html_trans:langs|safe }}</h3>
     {% endif %}
 
     {% if nav_form %}
@@ -333,7 +314,7 @@
                         </div>
                         <div id="source-edit">
                             You can edit your XForm here.<br />
-                            <form action="{% url corehq.apps.app_manager.views.edit_form_attr domain app.id form.get_unique_id  'xform' %}" method="POST">
+                            <form action="{% url corehq.apps.app_manager.views.edit_form_attr domain app.id form.get_unique_id 'xform' %}" method="POST">
                                 <textarea name="xform" id="xform-source-edit" style="height:550px;width:90%;font-family:Monospace;">
                                 Loading...
                                 </textarea><br />
@@ -346,10 +327,10 @@
                 </li><li>
                     <a class="dialog_opener" href="#"><span class="ui-icon ui-icon-arrowthick-1-n"></span>Upload</a>
                     <div class="dialog" title="Upload XForm">
-                        <form action="{% url corehq.apps.app_manager.views.edit_form_attr domain app.id form.get_unique_id  'xform' %}" method="POST" enctype="multipart/form-data">
-                            <input id="xform_file_input" type="file" name="xform" />
+                        <form action="{% url corehq.apps.app_manager.views.edit_form_attr domain app.id form.get_unique_id 'xform' %}" method="POST" enctype="multipart/form-data">
+                            <input type="file" id="xform_file_input" name="xform" />
                             <input type="hidden" name="ajax" value="false" />
-                            <input id="xform_file_submit"type="submit" value="Upload" />
+                            <input type="submit" id="xform_file_submit" value="Upload" />
                         </form>
                     </div>
                 </li><li>
@@ -383,13 +364,21 @@
             <div id="user_reg_home" class="config"></div>
         {% else %}
             {% if app.application_version == '1.0' %}
-                <h4>Cases and Referrals
-                    <span class="help_popover" data-help-key="Cases and Referrals"><span> <i class="icon icon-question-sign"></i></span></span></h4>
+                <h4>{% trans "Cases and Referrals" %}
+                    <span class="hq-help-template"
+                        data-title="{% trans "Cases and Referrals" %}"
+                        data-content="{% trans "Cases and referrals are a way of preserving information across multiple interactions with CommCare on the mobile phone." %}"
+                    ></span>
+                </h4>
                 <div class="casexml config" id="casexml_home">
                 </div>
             {% else %}
-                <h4>Case Configuration
-                    <span class="help_popover" data-help-key="Cases and Referrals"><span> <i class="icon icon-question-sign"></i></span></span></h4>
+                <h4>{% trans "Case Configuration" %}
+                    <span class="hq-help-template"
+                       data-title="{% trans "Case Configuration" %}"
+                       data-content="{% trans "Cases are a way of preserving information across multiple interactions with CommCare on the mobile phone." %}"
+                    </span>
+                </h4>
                 <span class="label label-info indent">The app builder for 2.0 apps currently doesn't support referrals</span>
                 <div class="casexml config" id="casexml_home">
                     <script type="text/html" id="remove-subcase-modal-template">
@@ -407,7 +396,12 @@
                     </script>
                     <div id="case-config-ko">
                         <hr/>
-                        <h4>CommCare 2.0 Child Cases <sup>beta</sup> <span class="help_popover" data-help-key="Child Cases"><span> <i class="icon icon-question-sign"></i></span></span></h4>
+                        <h4>CommCare 2.0 Child Cases <sup>beta</sup>
+                            <span class="hq-help-template"
+                                data-title="{% trans "Child Cases" %}"
+                                data-content="{% trans "Child Cases let you open other types of cases for use in other modules. When possible, they'll be linked to the current case so you'll always know where they came from. A great use of Child Cases is for tracking a newborn separately from its mother." %}"
+                            </span>
+                        </h4>
                         <div data-bind="foreach: subcases" class="indent form">
                             <div>
                                 <i class="icon-ok"></i>
@@ -442,7 +436,7 @@
                                             edit: $root.edit"></select>
                                     </span>
                                     <span data-bind="if: !$root.utils.getAnswers({question: condition.question()}).length">
-                                        <input class="code" data-bind="value: condition.answer, edit: $root.edit"/>
+                                        <input type="text" class="code" data-bind="value: condition.answer, edit: $root.edit"/>
                                     </span>
                             </div>
                             <div class="well" style="margin: 10px">
@@ -486,7 +480,7 @@
                                                 edit: $root.edit"></select>
                                         </td>
                                         <td>
-                                            <input class="code" data-bind="value: key, attr: {placeholder: defaultKey}, edit: $root.edit"/>
+                                            <input type="text" class="code" data-bind="value: key, attr: {placeholder: defaultKey}, edit: $root.edit"/>
                                             <p class="help-inline" data-bind="text: validate"></p>
                                         </td>
                                     </tr>

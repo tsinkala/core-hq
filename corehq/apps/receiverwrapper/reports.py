@@ -1,13 +1,15 @@
 from django.core.urlresolvers import reverse
 import pytz
+from corehq.apps.reports.standard.deployments import DeploymentsReport
 from corehq.apps.reports.datatables import DataTablesHeader, DataTablesColumn
-from corehq.apps.reports.standard import StandardDateHQReport, PaginatedHistoryHQReport
 from dimagi.utils.timezones import utils as tz_utils
 from couchforms.models import XFormError
 from corehq.apps.receiverwrapper.fields import SubmissionErrorType, \
     SubmissionTypeField
 from dimagi.utils.couch.pagination import FilteredPaginator, CouchFilter
 from corehq.apps.reports.display import xmlns_to_name
+from django.utils.translation import ugettext_noop
+from django.utils.translation import ugettext as _
 
 def compare_submissions(x, y):
     # these are backwards because we want most recent to come first
@@ -41,49 +43,78 @@ class SubmitFilter(CouchFilter):
                                  **self._kwargs)]
 
 
-class SubmissionErrorReport(PaginatedHistoryHQReport, StandardDateHQReport):
-    name = "Raw Forms, Errors &amp; Duplicates"
+class SubmissionErrorReport(DeploymentsReport):
+    name = ugettext_noop("Raw Forms, Errors & Duplicates")
     slug = "submit_errors"
+    ajax_pagination = True
+    asynchronous = False
+
     fields = ['corehq.apps.receiverwrapper.fields.SubmissionTypeField',
-              # 'corehq.apps.reports.fields.GroupField',
-              #'corehq.apps.reports.fields.DatespanField']
               ]
-    
-    def get_headers(self):
-        headers = DataTablesHeader(DataTablesColumn("View Form"),
-                                   DataTablesColumn("Username"),
-                                   DataTablesColumn("Submit Time"),
-                                   DataTablesColumn("Form Type"),
-                                   DataTablesColumn("Error Type"),
-                                   DataTablesColumn("Error Message"))
+
+    @property
+    def headers(self):
+        headers = DataTablesHeader(DataTablesColumn(_("View Form")),
+                                   DataTablesColumn(_("Username")),
+                                   DataTablesColumn(_("Submit Time")),
+                                   DataTablesColumn(_("Form Type")),
+                                   DataTablesColumn(_("Error Type")),
+                                   DataTablesColumn(_("Error Message")))
         headers.no_sort = True
         return headers
-    
-    def get_parameters(self):
-        self.submitfilter = SubmissionTypeField.get_filter_toggle(self.request)
-        
-    def get_report_context(self):
-        super(SubmissionErrorReport, self).get_report_context()
-        self.context['ajax_params'].append({'name': SubmissionTypeField.slug, 'value': [f.type for f in self.submitfilter if f.show]})
-    
-    def paginate_rows(self, skip, limit):
-        EMPTY_ERROR = "No Error"
-        EMPTY_USER = "No User"
-        EMPTY_FORM = "Unknown Form"
-        
-        filters = [SubmitFilter(self.domain, toggle.doc_type) for toggle in self.submitfilter if toggle.show]
-        paginator = FilteredPaginator(filters, compare_submissions)
-        items = paginator.get(skip, limit)
-        
-        self._total_count = XFormError.view("receiverwrapper/all_submissions_by_domain",
-                                            startkey=[self.domain, "by_type"],
-                                            endkey=[self.domain, "by_type", {}],
-                                            reduce=False).count()
-        self.count = paginator.total
+
+    _submitfilter = None
+    @property
+    def submitfilter(self):
+        if self._submitfilter is None:
+            self._submitfilter = SubmissionTypeField.get_filter_toggle(self.request)
+        return self._submitfilter
+
+    _paginator_results = None
+    @property
+    def paginator_results(self):
+        if self._paginator_results is None:
+            filters = [SubmitFilter(self.domain, toggle.doc_type) for toggle in self.submitfilter if toggle.show]
+            self._paginator_results = FilteredPaginator(filters, compare_submissions)
+        return self._paginator_results
+
+    @property
+    def shared_pagination_GET_params(self):
+        shared_params = super(SubmissionErrorReport, self).shared_pagination_GET_params
+        shared_params.append(dict(
+            name=SubmissionTypeField.slug,
+            value=[f.type for f in self.submitfilter if f.show]
+        ))
+        return shared_params
+
+    @property
+    def total_records(self):
+        return XFormError.view("receiverwrapper/all_submissions_by_domain",
+            startkey=[self.domain, "by_type"],
+            endkey=[self.domain, "by_type", {}],
+            reduce=False).count()
+
+    @property
+    def total_filtered_records(self):
+        return self.paginator_results.total
+
+    @property
+    def rows(self):
+        EMPTY_ERROR = _("No Error")
+        EMPTY_USER = _("No User")
+        EMPTY_FORM = _("Unknown Form")
+
+        items = self.paginator_results.get(self.pagination.start, self.pagination.count)
         
         def _to_row(error_doc):
             def _fmt_url(doc_id):
-                return "<a class='ajax_dialog' href='%s'>View Form</a>" % reverse('download_form', args=[self.domain, doc_id])
+                view_name = 'render_form_data' \
+                    if error_doc.doc_type in ["XFormInstance", "XFormArchived"] \
+                    else 'download_form'
+                return "<a class='ajax_dialog' href='%(url)s'>%(text)s</a>" % {
+                    "url": reverse(view_name, args=[self.domain, doc_id]),
+                    "text": _("View Form")
+                }
             
             def _fmt_date(somedate):
                 time = tz_utils.adjust_datetime_to_timezone(somedate, pytz.utc.zone, self.timezone.zone)

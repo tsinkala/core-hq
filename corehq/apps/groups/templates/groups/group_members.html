@@ -1,13 +1,13 @@
 {% extends "groups/all_groups.html" %}
 {% load i18n %}
 {% load hq_shared_tags %}
-
 {% block head %} {{ block.super }}
     <style type="text/css">
         .group-bubble {
             margin: .3em 0 .8em;
         }
     </style>
+    <script src="{% static 'hqwebapp/js/ui-element.js' %}"></script>
 {% endblock %}
 
 {% block js-inline %}{{ block.super }}
@@ -28,6 +28,14 @@
                     }
                 }
             }
+        });
+        $(function () {
+            var customDataEditor = uiElement.map_list('{{ group.group_id }}', '{% trans "Group Information" %}');
+            customDataEditor.val({{ group.metadata|JSON }});
+            customDataEditor.on("change", function () {
+                $("input#group-data").val(JSON.stringify(this.val()));
+            });
+            $("#group-data-form").prepend(customDataEditor.ui);
         });
     </script>
 {% endblock %}
@@ -71,7 +79,6 @@
                             <input type="text" value="{{ group.name }}" name="name" id="group-name-input" />
                         </div>
                     </div>
-                    {% if request.couch_user.is_previewer or group.case_sharing %}
                     <div class="control-group">
                         <label class="control-label" for="group-case-sharing-input">Case Sharing</label>
                         <div class="controls">
@@ -79,10 +86,9 @@
                                 <option value="true">On</option>
                                 <option value="false">Off</option>
                             </select>
-                            <p class="help-block">This is a preview feature that is only available internally.</p>
+                            <p class="help-block">Whether users within this group will share cases with other members of this group</p>
                         </div>
                     </div>
-                    {% endif %}
                     <div class="control-group">
                         <label class="control-label" for="group-reporting-input">Reporting</label>
                         <div class="controls">
@@ -90,7 +96,7 @@
                                 <option value="true">On</option>
                                 <option value="false">Off</option>
                             </select>
-                            <p class="help-block">Whether to use this group in group filtering in reports.</p>
+                            <p class="help-block">Whether this group's name will appear in the group filter list for reports</p>
                         </div>
                     </div>
                 </div>
@@ -130,5 +136,10 @@
             </div>
         </div>
     </div>
+    <h3>{% trans "Group Data" %}</h3>
+    <form id="group-data-form" class="form form-horizontal" name="group-data-form" method="post" action="{% url update_group_data domain group.get_id %}">
+        <input name="group-data" id="group-data" type="hidden" value='{{ group.metadata|JSON }}'></input>
+        <div class="form-actions"><button type="submit" class="btn btn-primary">{% trans "Update Information" %}</button></div>
+    </form>
 {% endblock %}
 

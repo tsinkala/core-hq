@@ -24,21 +24,26 @@ class Group(UndoableDocument):
     case_sharing = BooleanProperty()
     reporting = BooleanProperty(default=True)
 
-    def add_user(self, couch_user_id):
+    # custom data can live here
+    metadata = DictProperty()
+
+    def add_user(self, couch_user_id, save=True):
         if not isinstance(couch_user_id, basestring):
             couch_user_id = couch_user_id.user_id
         if couch_user_id not in self.users:
             self.users.append(couch_user_id)
-        self.save()
+        if save:
+            self.save()
         
-    def remove_user(self, couch_user_id):
+    def remove_user(self, couch_user_id, save=True):
         if not isinstance(couch_user_id, basestring):
             couch_user_id = couch_user_id.user_id
         if couch_user_id in self.users:
             for i in range(0,len(self.users)):
                 if self.users[i] == couch_user_id:
                     del self.users[i]
-                    self.save()
+                    if save:
+                        self.save()
                     return
     
     def add_group(self, group):
@@ -95,25 +100,25 @@ class Group(UndoableDocument):
         else:
             return users
     
-    def save(self, *args, **kwargs):
-        # forcibly replace empty name with '-'
-        self.name = self.name or '-'
-        super(Group, self).save()
-
     @classmethod
     def by_domain(cls, domain):
-        key = [domain]
-        return cls.view('groups/by_name', startkey=key, endkey=key + [{}], include_docs=True)
+        return cls.view('groups/by_domain', key=domain, include_docs=True)
 
     @classmethod
     def by_name(cls, domain, name):
         return cls.view('groups/by_name', key=[domain, name], include_docs=True).one()
 
     @classmethod
-    def by_user(cls, user, wrap=True):
-        results = cls.view('groups/by_user', key=user.user_id, include_docs=wrap)
+    def by_user(cls, user, wrap=True, include_names=False):
+        try:
+            user_id = user.user_id
+        except AttributeError:
+            user_id = user
+        results = cls.view('groups/by_user', key=user_id, include_docs=wrap)
         if wrap:
             return results
+        if include_names:
+            return [dict(group_id=r['id'], name=r['value'][1]) for r in results]
         else:
             return [r['id'] for r in results]
 
@@ -134,7 +139,26 @@ class Group(UndoableDocument):
 
     def create_delete_record(self, *args, **kwargs):
         return DeleteGroupRecord(*args, **kwargs)
-    
+
+    @property
+    def display_name(self):
+        if self.name:
+            return self.name
+        else:
+            return "[No Name]"
+
+    @classmethod
+    def user_in_group(cls, user_id, group_id):
+        if not user_id or not group_id:
+            return False
+        c = cls.get_db().view('groups/by_user', key=user_id, startkey_docid=group_id, endkey_docid=group_id).count()
+        if c == 0:
+            return False
+        elif c == 1:
+            return True
+        else:
+            raise Exception("This should just logically not be possible unless the group has the user in there twice")
+
 class DeleteGroupRecord(DeleteDocRecord):
     def get_doc(self):
         return Group.get(self.doc_id)

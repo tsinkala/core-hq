@@ -1,8 +1,22 @@
 var getLocalizedString = function (property, language) {
     // simple utility to localize a string based on a dict of 
     // language mappings.
-    return this.get(property)[language] || "?";
+    return localize(this.get(property), language);
 };
+
+var localize = function(obj, language) {
+    var s = obj[language];
+    if (!s) {
+        for (var lang in obj) {
+            if (obj.hasOwnProperty(lang) && obj[lang]) {
+                s = obj[lang];
+                break;
+            }
+        }
+    }
+    return s || localize.NOT_FOUND;
+};
+localize.NOT_FOUND = '?';
 
 var getCloudCareUrl = function(urlRoot, appId, moduleId, formId, caseId) {
     var url = urlRoot;
@@ -26,14 +40,31 @@ var getFormUrl = function(urlRoot, appId, moduleId, formId) {
     return urlRoot + "view/" + appId + "/modules-" + moduleId + "/forms-" + formId + "/context/";
 };
 
+var getFormEntryUrl = function (urlRoot, appId, moduleId, formId, caseId) {
+    return urlRoot + getFormEntryPath(appId, moduleId, formId, caseId);
+}
+var getFormEntryPath = function(appId, moduleId, formId, caseId) {
+    // TODO: make this cleaner
+    var url = "view/" + appId + "/" + moduleId + "/" + formId;
+    if (caseId) {
+        url = url + '/case/' + caseId
+    }
+    url += "/enter/";
+    return url;
+};
+
 var getSubmitUrl = function (urlRoot, appId) {
     // TODO: make this cleaner
     return urlRoot + "/" + appId + "/";
 };
 
-var getCaseFilterUrl = function(urlRoot, appId, moduleId) {
+var getCaseFilterUrl = function(urlRoot, appId, moduleId, special) {
     // TODO: make this cleaner
-    return urlRoot + "module/" + appId + "/modules-" + moduleId + "/";
+    var url = urlRoot + "module/" + appId + "/modules-" + moduleId + "/";
+    if (special === 'task-list') {
+        url += '?task-list=true';
+    }
+    return url
 };
 
 var showError = function (message, location, autoHideTime) {

@@ -1,4 +1,5 @@
   {% load xforms_extras %}
+  {% load hq_shared_tags %}
 <suite version="{{ app.version }}">
 
  {% for module in app.get_modules %}
@@ -14,7 +15,7 @@
  {% endfor %}
  {% if app.show_user_registration %}
     <xform>
-        <resource id="{{ form.unique_id }}" version="{{ app.version }}">
+        <resource id="{{ app.user_registration.unique_id }}" version="{{ app.version }}">
            <location authority="local">./user_registration.xml</location>
            <location authority="remote">./user_registration.xml</location>
         </resource>
@@ -64,32 +65,30 @@
          {% else %}{% if d.format == "enum" or d.format == "enum-image"%}
              <template{% if d.format == "enum-image" %} form="image"{% endif %}><text>
                  <xpath function="
-                  {% for key, val in d.enum.items %}
-                     if(/data/{{ d.model }}_{{ d.field }}_{{ forloop.parentloop.counter }} = '{{ key }}', ${{ key }},
+                  {% for key, val in d.enum.items|sort %}
+                     if(/data/{{ d.model }}_{{ d.field }}_{{ forloop.parentloop.counter }} = '{{ key }}', $k{{ key }},
                   {% endfor %}
                      '?'
                   {% for _ in d.enum %}
                      )
                   {% endfor %}
                  ">
-                  {% for key, val in d.enum.items %}
-                     <variable name="{{ key }}">
-                         <locale id="m{{ module.id }}.{{ detail.type }}.{{ d.model }}_{{ d.field }}_{{ forloop.parentloop.counter }}.enum.{{ key }}{% if d.format == "enum-image" %}.image{% endif %}"/>
+                  {% for key, val in d.enum.items|sort %}
+                     <variable name="k{{ key }}">
+                         <locale id="m{{ module.id }}.{{ detail.type }}.{{ d.model }}_{{ d.field }}_{{ forloop.parentloop.counter }}.enum.k{{ key }}{% if d.format == "enum-image" %}.image{% endif %}"/>
                      </variable>
                   {% endfor %}
                  </xpath>
              </text></template>
-         {% else %}{% ifequal d.format "years-ago" %}
-             <template><text><xpath function="if(/data/{{ d.model }}_{{ d.field }}_{{ forloop.counter }} = '', '', string(int((today() - date(/data/{{ d.model }}_{{ d.field }}_{{ forloop.counter }})) div 365.25)))"/></text></template>
-         {% else %}{% ifequal d.format "months-ago" %}
-             <template><text><xpath function="if(/data/{{ d.model }}_{{ d.field }}_{{ forloop.counter }} = '', '', string(int((today() - date(/data/{{ d.model }}_{{ d.field }}_{{ forloop.counter }})) div 30.4375)))"/></text></template>
+         {% else %}{% ifequal d.format "time-ago" %}
+             <template><text><xpath function="if({{ d.xpath }} = '', '', string(int((today() - date({{ d.xpath }})) div {{ d.time_ago_interval }})))"/></text></template>
          {% else %}{% ifequal d.format "late-flag"%}
              <template width="10%"><text><xpath function="if(/data/{{ d.model }}_{{ d.field }}_{{ forloop.counter }} = '', '*', if(today() - date(/data/{{ d.model }}_{{ d.field }}_{{ forloop.counter }}) &gt; {{ d.late_flag }}, '*', ''))"/></text></template>
          {% else %}{% ifequal d.format "phone" %}
              <template form="phone"><text><xpath function="/data/{{ d.model }}_{{ d.field }}_{{ forloop.counter }}" /></text></template>
          {% else %}{% if d.format == "invisible" %}
              <template{% if detail.display == "short" %} width="0"{% endif %}><text><xpath function="/data/{{ d.model }}_{{ d.field }}_{{ forloop.counter }}" /></text></template>
-         {% endif %}{% endifequal %}{% endifequal %}{% endifequal %}{% endifequal %}{% endif %}{% endifequal %}{% endifequal %}{% endif %}
+         {% endif %}{% endifequal %}{% endifequal %}{% endifequal %}{% endif %}{% endifequal %}{% endifequal %}{% endif %}
 
         </field>
         {% endif %}

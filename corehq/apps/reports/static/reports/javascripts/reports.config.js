@@ -1,27 +1,46 @@
 var HQReport = function (options) {
+    'use strict';
     var self = this;
     self.domain = options.domain;
     self.datespan = options.datespan;
-
+    self.filterSet = options.filterSet || false;
+    self.needsFilters = options.needsFilters || false;
     self.filterAccordion = options.filterAccordion || "#reportFilters";
+    self.filterSubmitButton = options.filterSubmitButton || $('#paramSelectorForm button[type="submit"]');
     self.toggleFiltersButton = options.toggleFiltersButton || "#toggle-report-filters";
     self.exportReportButton = options.exportReportButton || "#export-report-excel";
-    self.baseSlug = options.baseSlug || 'reports';
+    self.urlRoot = options.urlRoot;
+    self.slug = options.slug;
+    self.subReportSlug = options.subReportSlug;
+    self.type = options.type;
 
     self.toggleFiltersCookie = self.domain+'.hqreport.toggleFilterState';
     self.datespanCookie = self.domain+".hqreport.filterSetting.test.datespan";
-    self.globalSavePath = '/a/'+self.domain+'/';
+
+    self.initialLoad = true;
 
     self.init = function () {
         $(function () {
             checkFilterAccordionToggleState();
 
-            $(self.exportReportButton).click(function () {
+            $(self.exportReportButton).click(function (e) {
                 var params = window.location.search.substr(1);
-                window.location.href = window.location.pathname.replace('/'+self.baseSlug+'/',
-                    '/'+self.baseSlug+'/export/')+"?"+params;
+                var exportURL;
+                e.preventDefault();
+                if (params.length <= 1) {
+                    if (self.loadDatespanFromCookie()) {
+                        params = "startdate="+self.datespan.startdate+
+                            "&enddate="+self.datespan.enddate;
+                    }
+                }
+                window.location.href = window.location.pathname.replace(self.urlRoot,
+                    self.urlRoot+'export/')+"?"+params;
             });
 
+            self.resetFilterState();
+            if (self.needsFilters) {
+                self.filterSubmitButton.button('reset').addClass('btn-primary');
+            }
         });
     };
 
@@ -40,9 +59,9 @@ var HQReport = function (options) {
     self.saveDatespanToCookie = function () {
         if (self.datespan) {
             $.cookie(self.datespanCookie+'.startdate', self.datespan.startdate,
-                {path: self.globalSavePath, expires: 1});
+                {path: self.urlRoot, expires: 1});
             $.cookie(self.datespanCookie+'.enddate', self.datespan.enddate,
-                {path: self.globalSavePath, expires: 1});
+                {path: self.urlRoot, expires: 1});
         }
     };
 
@@ -62,22 +81,35 @@ var HQReport = function (options) {
     };
 
     var checkFilterAccordionToggleState = function () {
+        var _setShowFilterCookie = function (show) {
+            var showStr = show ? 'in' : '';
+            $.cookie(self.toggleFiltersCookie, showStr, {path: self.urlRoot, expires: 1});
+        };
+        
+        if ($.cookie(self.toggleFiltersCookie) === null) {
+            // default to showing filters
+            _setShowFilterCookie(true);
+        }
         $(self.filterAccordion).addClass($.cookie(self.toggleFiltersCookie));
+        
+        if ($.cookie(self.toggleFiltersCookie) == 'in') {
+            $(self.toggleFiltersButton).button('close');
+        } else {
+            $(self.toggleFiltersButton).button('open');
+        }
 
-        if ($.cookie(self.toggleFiltersCookie) == 'in')
-            $(self.toggleFiltersButton).button('hide');
-        else
-            $(self.toggleFiltersButton).button('show');
-
-        $(self.filterAccordion).on('hidden', function () {
-            $.cookie(self.toggleFiltersCookie, '', {path: self.globalSavePath, expires: 1});
-            $(self.toggleFiltersButton).button('show');
+        $(self.filterAccordion).on('hidden', function (data) {
+            if (!(data.target && $(data.target).hasClass('modal'))) {
+                _setShowFilterCookie(true);
+                $(self.toggleFiltersButton).button('open');
+            }
         });
 
         $(self.filterAccordion).on('show', function () {
-            $.cookie(self.toggleFiltersCookie, 'in', {path: self.globalSavePath, expires: 1});
-            $(self.toggleFiltersButton).button('hide');
-        })
+            _setShowFilterCookie(true);
+            $(self.toggleFiltersButton).button('close');
+        });
+
     };
 
     $(self.filterAccordion).on('hqreport.filter.datespan.startdate', function(event, value) {
@@ -88,5 +120,12 @@ var HQReport = function (options) {
         self.datespan.enddate = value;
     });
 
-
+    self.resetFilterState = function () {
+        $('#paramSelectorForm fieldset button, #paramSelectorForm fieldset span[data-dropdown="dropdown"]').click(function() {
+            $('#paramSelectorForm button[type="submit"]').button('reset').addClass('btn-primary');
+        });
+        $('#paramSelectorForm fieldset').change(function () {
+            $('#paramSelectorForm button[type="submit"]').button('reset').addClass('btn-primary');
+        });
+    };
 };

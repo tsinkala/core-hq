@@ -2,11 +2,10 @@ from corehq.apps.users.models import CouchUser
 from django import forms
 from django.contrib.auth.models import User
 import re
-from corehq.apps.domain.forms import clean_password, max_pwd, _BaseForm
+from corehq.apps.domain.forms import clean_password, max_pwd
 from django.core.validators import validate_email
 from corehq.apps.domain.models import Domain
 from corehq.apps.domain.utils import new_domain_re, new_org_re, new_org_title_re, website_re
-from corehq.apps.registration.models import RegistrationRequest
 from corehq.apps.orgs.models import Organization
 
 class NewWebUserRegistrationForm(forms.Form):
@@ -18,6 +17,7 @@ class NewWebUserRegistrationForm(forms.Form):
                                     max_length=User._meta.get_field('email').max_length,
                                     help_text='You will use this email to log in.')
     password  =  forms.CharField(label='Password', max_length=max_pwd, widget=forms.PasswordInput(render_value=False))
+    eula_confirmed = forms.BooleanField(required=False, label="End User License Agreement") # Must be set to False to have the clean_*() routine called
 
     def clean_full_name(self):
         data = self.cleaned_data['full_name'].split()
@@ -42,6 +42,12 @@ class NewWebUserRegistrationForm(forms.Form):
             if isinstance(self.cleaned_data[field], basestring):
                 self.cleaned_data[field] = self.cleaned_data[field].strip()
         return self.cleaned_data
+
+    def clean_eula_confirmed(self):
+        data = self.cleaned_data['eula_confirmed']
+        if data is not True:
+            raise forms.ValidationError('You must agree to our End User License Agreement in order to register an account.')
+        return data
 
 
 class OrganizationRegistrationForm(forms.Form):
@@ -111,7 +117,6 @@ class DomainRegistrationForm(forms.Form):
     """
     org = forms.CharField(widget=forms.HiddenInput(), required=False)
     domain_name =  forms.CharField(label='Project Name:', max_length=25)
-    tos_confirmed = forms.BooleanField(required=False, label="Terms of Service") # Must be set to False to have the clean_*() routine called
 
     def clean_domain_name(self):
         data = self.cleaned_data['domain_name'].strip().lower()
@@ -124,12 +129,6 @@ class DomainRegistrationForm(forms.Form):
             conflict = Domain.get_by_name(data) or Domain.get_by_name(data.replace('-', '.'))
         if conflict:
             raise forms.ValidationError('Project name already taken---please try another')
-        return data
-
-    def clean_tos_confirmed(self):
-        data = self.cleaned_data['tos_confirmed']
-        if data is not True:
-            raise forms.ValidationError('You must agree to our Terms Of Service in order to create your own project.')
         return data
 
     def clean(self):

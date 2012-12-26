@@ -4,7 +4,9 @@ from django import template
 from django.conf import settings
 from django.core.urlresolvers import reverse
 from django.utils.safestring import mark_safe
+from django.utils.translation import ugettext as _
 from corehq.apps.domain.models import Domain
+from dimagi.utils.logging import notify_exception
 from dimagi.utils.web import json_handler
 
 
@@ -12,7 +14,6 @@ register = template.Library()
 
 @register.filter
 def JSON(obj):
-
     return mark_safe(json.dumps(obj, default=json_handler))
 
 @register.filter
@@ -68,13 +69,11 @@ def build_url(relative_path, request=None):
 
 try:
     from resource_versions import resource_versions
-except ImportError:
+except (ImportError, SyntaxError):
     resource_versions = {}
 @register.simple_tag
 def static(url):
     resource_url = url
-    if "hq_bootstrap" in url:
-        resource_url = resource_url.replace("/css/", "/less/").replace(".css", ".less").replace("hq_bootstrap/", "hq-bootstrap/")
     version = resource_versions.get(resource_url)
     url = settings.STATIC_URL + url
     if version:
@@ -98,7 +97,15 @@ def domains_for_user(request, selected_domain=None):
         lst.append('<li><a href="%s">Back to My Projects...</a></li>' % reverse("domain_select"))
         lst.append('<li class="divider"></li>')
     else:
-        domain_list = Domain.active_for_user(request.user)
+        try:
+            domain_list = Domain.active_for_user(request.couch_user)
+        except Exception:
+            if settings.DEBUG:
+                raise
+            else:
+                domain_list = Domain.active_for_user(request.user)
+                notify_exception(request)
+
         if len(domain_list) > 0:
             lst.append('<li class="nav-header">My Projects</li>')
             for domain in domain_list:
@@ -111,6 +118,7 @@ def domains_for_user(request, selected_domain=None):
             lst.append('<li><a href="/a/public/">CommCare Demo Project</a></li>')
             lst.append('<li class="divider"></li>')
     lst.append('<li><a href="%s">New Project...</a></li>' % new_domain_url)
+    lst.append('<li><a href="%s">CommCare Exchange...</a></li>' % reverse("appstore"))
     lst.append("</ul>")
 
     return "".join(lst)
@@ -122,18 +130,18 @@ def list_my_domains(request):
     lst.append('<ul class="nav nav-pills nav-stacked">')
     for domain in domain_list:
         default_url = reverse("domain_homepage", args=[domain.name])
-        lst.append('<li><a href="%s">%s</a></li>' % (default_url, domain.name))
+        lst.append('<li><a href="%s">%s</a></li>' % (default_url, domain.display_name()))
     lst.append('</ul>')
 
     return "".join(lst)
 
 @register.simple_tag
 def commcare_user():
-    return settings.COMMCARE_USER_TERM
+    return _(settings.COMMCARE_USER_TERM)
 
 @register.simple_tag
 def hq_web_user():
-    return settings.WEB_USER_TERM
+    return _(settings.WEB_USER_TERM)
 
 @register.simple_tag
 def is_url_active(request, matching_string=""):
@@ -145,3 +153,21 @@ def is_url_active(request, matching_string=""):
 def mod(value, arg):
     return value % arg
 
+
+# This is taken verbatim from https://code.djangoproject.com/ticket/15583
+@register.filter(name='sort')
+def listsort(value):
+    if isinstance(value,dict):
+        new_dict = SortedDict()
+        key_list = value.keys()
+        key_list.sort()
+        for key in key_list:
+            new_dict[key] = value[key]
+        return new_dict
+    elif isinstance(value, list):
+        new_list = list(value)
+        new_list.sort()
+        return new_list
+    else:
+        return value
+listsort.is_safe = True

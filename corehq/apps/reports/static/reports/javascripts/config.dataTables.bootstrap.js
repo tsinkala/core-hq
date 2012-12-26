@@ -6,6 +6,7 @@ function HQReportDataTables(options) {
     self.paginationType = options.paginationType || 'bootstrap';
     self.defaultRows = options.defaultRows || 10;
     self.startAtRowNum = options.startAtRowNum || 0;
+    self.showAllRowsOption = options.showAllRowsOption || false;
     self.aoColumns = options.aoColumns;
     self.autoWidth = (options.autoWidth != undefined) ? options.autoWidth : true;
     self.customSort = options.customSort;
@@ -16,6 +17,7 @@ function HQReportDataTables(options) {
     self.fixColumns = !!(options.fixColumns);
     self.fixColsNumLeft = options.fixColsNumLeft || 1;
     self.fixColsWidth = options.fixColsWidth || 100;
+    self.datatable = null;
 
 
     this.render = function () {
@@ -39,7 +41,6 @@ function HQReportDataTables(options) {
                 bAutoWidth: self.autoWidth,
                 sScrollX: "100%"
             };
-            console.log(params.iDisplayLength);
 
             if(self.ajaxSource) {
                 params.bServerSide = true;
@@ -68,19 +69,27 @@ function HQReportDataTables(options) {
                 sZeroRecords: self.emptyText
             };
 
+            params.fnDrawCallback = function (a,b,c) {
+                /* be able to set fnDrawCallback from outside here later */
+                if (self.fnDrawCallback) {
+                    self.fnDrawCallback(a,b,c);
+                }
+            };
+
             if(self.aoColumns)
                 params.aoColumns = self.aoColumns;
 
             var datatable = $(this).dataTable(params);
-            if(self.customSort)
+            if (!self.datatable)
+                self.datatable = datatable;
+            if(self.customSort) {
                 datatable.fnSort( self.customSort );
+            }
             if(self.fixColumns)
                 new FixedColumns( datatable, {
                     iLeftColumns: self.fixColsNumLeft,
                     iLeftWidth: self.fixColsWidth
                 } );
-
-            console.log(datatable);
 
 
             var $dataTablesFilter = $(".dataTables_filter");
@@ -112,6 +121,8 @@ function HQReportDataTables(options) {
                 $dataTablesLength.append($selectField);
                 $selectLabel.remove();
                 $selectField.children().append(" per page");
+                if (self.showAllRowsOption)
+                    $selectField.append($('<option value="-1" />').text("All Rows"));
                 $selectField.addClass("input-medium");
             }
             $(".dataTables_length select").change(function () {
@@ -129,16 +140,26 @@ $.extend( $.fn.dataTableExt.oStdClasses, {
 
 // For sorting rows
 jQuery.fn.dataTableExt.oSort['title-numeric-asc']  = function(a,b) {
-    var x = a.match(/title="*(-?[0-9]+)/)[1];
-    var y = b.match(/title="*(-?[0-9]+)/)[1];
-    x = parseFloat( x );
-    y = parseFloat( y );
+    var x = a.match(/title="*(-?[0-9]+)/);
+    var y = b.match(/title="*(-?[0-9]+)/);
+
+    if (x === null && y === null) return 0;
+    if (x === null) return -1;
+    if (y === null) return 1;
+
+    x = parseFloat(x[1]);
+    y = parseFloat(y[1]);
     return ((x < y) ? -1 : ((x > y) ?  1 : 0));
 };
 jQuery.fn.dataTableExt.oSort['title-numeric-desc'] = function(a,b) {
-    var x = a.match(/title="*(-?[0-9]+)/)[1];
-    var y = b.match(/title="*(-?[0-9]+)/)[1];
-    x = parseFloat( x );
-    y = parseFloat( y );
+    var x = a.match(/title="*(-?[0-9]+)/);
+    var y = b.match(/title="*(-?[0-9]+)/);
+
+    if (x === null && y === null) return 0;
+    if (x === null) return 1;
+    if (y === null) return -1;
+
+    x = parseFloat(x[1]);
+    y = parseFloat(y[1]);
     return ((x < y) ?  1 : ((x > y) ? -1 : 0));
 };

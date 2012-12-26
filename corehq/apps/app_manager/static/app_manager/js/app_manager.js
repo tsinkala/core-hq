@@ -56,22 +56,6 @@
                 }
             }
         }
-        function makeBuildErrorLinksSwitchTabs() {
-            $("#build-errors a").click(function () {
-                $('#form-tabs').tabs("select", 0);
-            });
-        }
-
-        //
-        function resetMakeNewBuild() {
-            var $button = $("#make-new-build");
-            if (lastAppVersion < appVersion) {
-                $button.show();
-            } else {
-                $button.hide();
-            }
-        }
-        resetMakeNewBuild();
         COMMCAREHQ.resetIndexes = resetIndexes;
 
         if (edit) {
@@ -90,6 +74,11 @@
 	                                $form.find('[name="' + key + '"]').val(data.corrections[key]);
 	                            }
 	                        }
+                            if (data.hasOwnProperty('case_list-show')){
+                                var $case_details_screen = $('#detail-screen-config');
+                                if (data['case_list-show']) $case_details_screen.show(500);
+                                else $case_details_screen.hide(500);
+                            }
 	                    }
 	                }).ui.appendTo($buttonHolder);
                 });
@@ -294,17 +283,6 @@
             // make sure that column_id changes when index changes (after drag-drop)
             $(this).closest('tr').find('[name="index"]').val($(this).text());
         }).trigger('change');
-
-        makeBuildErrorLinksSwitchTabs();
-
-        $("#make-new-build").submit(function () {
-            var comment = window.prompt("Please write a comment about the build you're making to help you remember later:");
-            if (comment || comment === "") {
-                $(this).find("input[name='comment']").val(comment);
-            } else {
-                return false;
-            }
-        });
 
         COMMCAREHQ.app_manager.on('change:commcareVersion', function () {
             $('.commcare-feature').each(function () {

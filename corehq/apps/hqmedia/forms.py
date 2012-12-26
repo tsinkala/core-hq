@@ -76,7 +76,7 @@ class HQMediaZipUploadForm(forms.Form):
                      upload_path=path,
                      username=username,
                      replace_attachment=replace_attachment)
-                media.add_domain(domain)
+                media.add_domain(domain, owner=True)
                 app.create_mapping(media, form_path)
             if cache_handler:
                 cache_handler.sync()
@@ -101,14 +101,14 @@ class HQMediaFileUploadForm(forms.Form):
             content_type = mime.from_buffer(data)
             if content_type == 'application/zip':
                 raise forms.ValidationError('Please use the zip file uploader to upload zip files.')
-            media = eval(self.cleaned_data['multimedia_class'])
+            media = CommCareMultimedia.get_doc_class(self.cleaned_data['multimedia_class'])
             if not media.validate_content_type(content_type):
                 raise forms.ValidationError('That was not a valid file type, please try again with a different file.')
             return media_file
 
 
     def save(self, domain, app, username, cache_handler):
-        media_class = eval(self.cleaned_data['multimedia_class'])
+        media_class = CommCareMultimedia.get_doc_class(self.cleaned_data['multimedia_class'])
         media_file = self.cleaned_data['media_file']
         replace_attachment = self.cleaned_data['multimedia_upload_action']
         form_path = self.cleaned_data['multimedia_form_path']
@@ -125,7 +125,7 @@ class HQMediaFileUploadForm(forms.Form):
                      upload_path=media_file.name,
                      username=username,
                      replace_attachment=replace_attachment)
-            media.add_domain(domain)
+            media.add_domain(domain, owner=True)
             app.create_mapping(media, form_path)
         if cache_handler:
             cache_handler.sync()

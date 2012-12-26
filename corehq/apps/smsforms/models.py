@@ -8,7 +8,7 @@ class XFormsSession(Document):
     """
     # generic properties
     connection_id = StringProperty()
-    session_id = IntegerProperty()
+    session_id = StringProperty()
     form_xmlns = StringProperty()
     start_time = DateTimeProperty()
     modified_time = DateTimeProperty()
@@ -20,6 +20,7 @@ class XFormsSession(Document):
     user_id = StringProperty()
     app_id = StringProperty()
     submission_id = StringProperty()
+    survey_incentive = StringProperty()
     
     def __unicode__(self):
         return 'Form %(form)s in domain %(domain)s. Last modified: %(mod)s' % \

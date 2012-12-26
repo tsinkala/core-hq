@@ -1,10 +1,14 @@
 from datetime import datetime
+from django.contrib import messages
+import logging
+from corehq.apps.announcements.models import ReportAnnouncement
 from corehq.apps.groups.models import Group
+from corehq.apps.reports.decorators import cache_users
 from corehq.apps.reports.display import xmlns_to_name
 from corehq.apps.reports.models import HQUserType, TempCommCareUser
 from corehq.apps.users.models import CommCareUser, CouchUser
 from corehq.apps.users.util import user_id_to_username
-from couchexport.util import FilterFunction
+from couchexport.util import SerializableFunction
 from couchforms.filters import instances
 from dimagi.utils.couch.database import get_db
 from dimagi.utils.dates import DateSpan
@@ -17,86 +21,51 @@ from dimagi.utils.timezones import utils as tz_utils
 from dimagi.utils.web import json_request
 from django.conf import settings
 
-def report_context(domain,
-            report_partial=None,
-            title=None,
-            headers=None,
-            rows=None,
-            individual=None,
-            case_type=None,
-            show_case_type_counts=True,
-            group=None,
-            ufilter=None,
-            form=None,
-            datespan=None,
-            show_time_notice=False
-        ):
-    context = {
-        "domain": domain,
-        "report": {
-            "name": title,
-            "headers": headers or [],
-            "rows": rows or []
-        },
-        "show_time_notice": show_time_notice,
-        "now": datetime.utcnow()
-    }
-    if report_partial:
-        context.update(report_partial=report_partial)
-    if individual is not None:
-        context.update(
-            show_users=True,
-            users= user_list(domain),
-            individual=individual,
-        )
-    if form is not None:
-        context.update(
-            show_forms=True,
-            selected_form=form,
-            forms=form_list(domain),
-        )
-        
-    if group is not None:
-        context.update(
-            show_groups=True,
-            group=group,
-            groups=Group.get_reporting_groups(domain),
-        )
-    if case_type is not None:
-        if individual:
-            user_ids = [individual]
-        elif group is not None:
-            _, user_ids = get_all_users_by_domain(domain, group=group)
-        elif ufilter is not None:
-            _, user_ids = get_all_users_by_domain(domain, filter_users=ufilter)
-        else:
-            user_ids = None
+def make_form_couch_key(domain, by_submission_time=True,
+                   xmlns=None, user_id=None, app_id=None):
+    prefix = ["submission"] if by_submission_time else ["completion"]
+    key = [domain] if domain is not None else []
+    if xmlns == "":
+        prefix.append('xmlns')
+    elif app_id == "":
+        prefix.append('app')
+    elif user_id == "":
+        prefix.append('user')
+    else:
+        if xmlns:
+            prefix.append('xmlns')
+            key.append(xmlns)
+        if app_id:
+            prefix.append('app')
+            key.append(app_id)
+        if user_id:
+            prefix.append('user')
+            key.append(user_id)
+    return [" ".join(prefix)] + key
 
-        case_types = get_case_types(domain, user_ids)
-        if len(case_types) == 1:
-            case_type = case_types.items()[0][0]
+def all_xmlns_in_domain(domain):
+    # todo replace form_list with this
+    key = make_form_couch_key(domain, xmlns="")
+    domain_xmlns = get_db().view('reports_forms/all_forms',
+        startkey=key,
+        endkey=key+[{}],
+        group=True,
+        group_level=3,
+    ).all()
+    return [d['key'][-1] for d in domain_xmlns if d['key'][-1] is not None]
 
-        open_count, all_count = get_case_counts(domain, user_ids=user_ids)
-        context.update(
-            show_case_types=True,
-            case_types=case_types,
-            n_all_case_types={'all': all_count, 'open': open_count},
-            case_type=case_type,
-        )
-    if datespan:
-        context.update(
-            show_dates=True,
-            datespan=datespan
-        )
-    return context
 
-def user_list(domain): 
+def user_list(domain):
+    #todo cleanup
+    #referenced in fields -> SelectMobileWorkerField
     users = list(CommCareUser.by_domain(domain))
     users.extend(CommCareUser.by_domain(domain, is_active=False))
     users.sort(key=lambda user: (not user.is_active, user.username))
     return users
 
 def form_list(domain):
+    #todo cleanup
+    #referenced in fields SelectFormField
     view = get_db().view("formtrends/form_duration_by_user",
                          startkey=["xdu", domain, ""],
                          endkey=["xdu", domain, {}],
@@ -105,37 +74,8 @@ def form_list(domain):
                          reduce=True)
     return [{"text": xmlns_to_name(domain, r["key"][2], app_id=None), "val": r["key"][2]} for r in view]
 
-def get_case_types(domain, user_ids=None):
-    case_types = {}
-    key = [domain]
-    for r in get_db().view('hqcase/all_cases',
-        startkey=key,
-        endkey=key + [{}],
-        group_level=2
-    ).all():
-        case_type = r['key'][1]
-        if case_type:
-            open_count, all_count = get_case_counts(domain, case_type, user_ids)
-            case_types[case_type] = {'open': open_count, 'all': all_count}
-    return case_types
-
-def get_case_counts(domain, case_type=None, user_ids=None):
-    user_ids = user_ids or [{}]
-    for view_name in ('hqcase/open_cases', 'hqcase/all_cases'):
-        def individual_counts():
-            for user_id in user_ids:
-                key = [domain, case_type or {}, user_id]
-                try:
-                    yield get_db().view(view_name,
-                        startkey=key,
-                        endkey=key + [{}],
-                        group_level=0
-                    ).one()['value']
-                except TypeError:
-                    yield 0
-        yield sum(individual_counts())
-
 def get_group_params(domain, group='', users=None, user_id_only=False, **kwargs):
+    # refrenced in reports/views and create_export_filter below
     if group:
         if not isinstance(group, Group):
             group = Group.get(group)
@@ -150,12 +90,19 @@ def get_group_params(domain, group='', users=None, user_id_only=False, **kwargs)
         users = sorted(users, key=lambda user: user.user_id)
     return group, users
 
-# New HQReport Structure stuff. There's a lot of duplicate code from above, only because I don't want to ruin any old
-# reports until everything is fully refactored....
 
-def get_all_users_by_domain(domain, group='', individual='', filter_users=None):
-    """ Returns a list of CommCare Users based on domain, group, and user filter (demo_user, admin, registered, unknown)
+cache_users_by_domain = cache_users()
+#@cache_users_by_domain
+def get_all_users_by_domain(domain=None, group=None, individual=None,
+                            user_filter=None, simplified=False, CommCareUser=None):
     """
+        WHEN THERE ARE A LOT OF USERS, THIS IS AN EXPENSIVE OPERATION.
+        Returns a list of CommCare Users based on domain, group, and user 
+        filter (demo_user, admin, registered, unknown)
+    """
+    if not CommCareUser:
+        from corehq.apps.users.models import CommCareUser
+
     if group:
         # get all the users only in this group and don't bother filtering.
         if not isinstance(group, Group):
@@ -169,48 +116,59 @@ def get_all_users_by_domain(domain, group='', individual='', filter_users=None):
         if users and users[0] is None:
             raise Http404()
     else:
-        if not filter_users:
-            filter_users = HQUserType.use_defaults()
+        if not user_filter:
+            user_filter = HQUserType.use_defaults()
         users = []
         submitted_user_ids = get_all_userids_submitted(domain)
         registered_user_ids = [user.user_id for user in CommCareUser.by_domain(domain)]
         for user_id in submitted_user_ids:
-            if user_id in registered_user_ids and filter_users[HQUserType.REGISTERED].show:
+            if user_id in registered_user_ids and user_filter[HQUserType.REGISTERED].show:
                 user = CommCareUser.get_by_user_id(user_id)
                 users.append(user)
             elif not user_id in registered_user_ids and \
-                 (filter_users[HQUserType.ADMIN].show or
-                  filter_users[HQUserType.DEMO_USER].show or
-                  filter_users[HQUserType.UNKNOWN].show):
+                 (user_filter[HQUserType.ADMIN].show or
+                  user_filter[HQUserType.DEMO_USER].show or
+                  user_filter[HQUserType.UNKNOWN].show):
                 username = get_username_from_forms(domain, user_id)
                 temp_user = TempCommCareUser(domain, username, user_id)
-                if filter_users[temp_user.filter_flag].show:
+                if user_filter[temp_user.filter_flag].show:
                     users.append(temp_user)
-        if filter_users[HQUserType.UNKNOWN].show:
+        if user_filter[HQUserType.UNKNOWN].show:
             users.append(TempCommCareUser(domain, '', None))
 
-        if filter_users[HQUserType.REGISTERED].show:
+        if user_filter[HQUserType.REGISTERED].show:
             # now add all the registered users who never submitted anything
             for user_id in registered_user_ids:
                 if not user_id in submitted_user_ids:
                     user = CommCareUser.get_by_user_id(user_id)
                     users.append(user)
+
+    if simplified:
+        return [_report_user_dict(user) for user in users]
     return users
 
 def get_all_userids_submitted(domain):
-    submitted = get_db().view(
-        'reports/all_users_submitted',
+    submitted = get_db().view('reports_forms/all_submitted_users',
         startkey=[domain],
         endkey=[domain, {}],
         group=True,
-        reduce=True
     ).all()
-    return [ user['key'][1] for user in submitted]
+    return [user['key'][1] for user in submitted]
+
+def get_all_owner_ids_submitted(domain):
+    key = ["all owner", domain]
+    submitted = get_db().view('case/all_cases',
+        group_level=3,
+        startkey=key,
+        endkey=key + [{}],
+    ).all()
+    return set([row['key'][2] for row in submitted])
 
 def get_username_from_forms(domain, user_id):
+    key = make_form_couch_key(domain, user_id=user_id)
     user_info = get_db().view(
-        'reports/submit_history',
-        startkey=[domain, user_id],
+        'reports_forms/all_forms',
+        startkey=key,
         limit=1,
         reduce=False
     ).one()
@@ -226,7 +184,14 @@ def get_username_from_forms(domain, user_id):
             username = possible_username
     return username
 
+
+def _report_user_dict(user):
+    user_report_attrs = ['user_id', 'username_in_report', 'raw_username', 'is_active']
+    return dict([(attr, getattr(user, attr)) for attr in user_report_attrs])
+
+
 def format_datatables_data(text, sort_key):
+    # used below
     data = {"html": text,
             "sort_key": sort_key}
     return data
@@ -240,6 +205,7 @@ def app_export_filter(doc, app_id):
         return True
 
 def get_timezone(couch_user_id, domain):
+    #todo cleanup
     timezone = None
     if couch_user_id:
         try:
@@ -273,7 +239,6 @@ def datespan_export_filter(doc, datespan):
     return False
 
 def case_users_filter(doc, users):
-    pass
     try:
         return doc['user_id'] in users
     except KeyError:
@@ -316,24 +281,26 @@ def create_export_filter(request, domain, export_type='form'):
 
     if export_type == 'case':
         if user_filters and use_user_filters:
-            users_matching_filter = map(lambda x: x._id, get_all_users_by_domain(domain, filter_users=user_filters))
-            filter = FilterFunction(case_users_filter, users=users_matching_filter)
+            users_matching_filter = map(lambda x: x.get('user_id'), get_all_users_by_domain(domain,
+                user_filter=user_filters, simplified=True))
+            filter = SerializableFunction(case_users_filter, users=users_matching_filter)
         else:
-            filter = FilterFunction(case_group_filter, group=group)
+            filter = SerializableFunction(case_group_filter, group=group)
     else:
-        filter = FilterFunction(instances) & FilterFunction(app_export_filter, app_id=app_id)
-        filter &= FilterFunction(datespan_export_filter, datespan=request.datespan)
+        filter = SerializableFunction(instances) & SerializableFunction(app_export_filter, app_id=app_id)
+        filter &= SerializableFunction(datespan_export_filter, datespan=request.datespan)
         if user_filters and use_user_filters:
-            users_matching_filter = map(lambda x: x._id, get_all_users_by_domain(domain, filter_users=user_filters))
-            filter &= FilterFunction(users_filter, users=users_matching_filter)
+            users_matching_filter = map(lambda x: x.get('user_id'), get_all_users_by_domain(domain,
+                user_filter=user_filters, simplified=True))
+            filter &= SerializableFunction(users_filter, users=users_matching_filter)
         else:
-            filter &= FilterFunction(group_filter, group=group)
+            filter &= SerializableFunction(group_filter, group=group)
     return filter
 
 def get_possible_reports(domain):
     reports = []
     report_map = []
-    report_map.extend(settings.STANDARD_REPORT_MAP.items())
+    report_map.extend(settings.PROJECT_REPORT_MAP.items())
     report_map.extend(settings.CUSTOM_REPORT_MAP.get(domain, {}).items())
     for heading, models in report_map:
         for model in models:
@@ -341,6 +308,7 @@ def get_possible_reports(domain):
     return reports
 
 def format_relative_date(date, tz=pytz.utc):
+    #todo cleanup
     now = datetime.now(tz=tz)
     time = datetime.replace(date, tzinfo=tz)
     dtime = now - time
@@ -351,3 +319,60 @@ def format_relative_date(date, tz=pytz.utc):
     else:
         dtext = "%s days ago" % dtime.days
     return format_datatables_data(dtext, dtime.days)
+
+def friendly_timedelta(td):
+    hours, remainder = divmod(td.seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    parts = [
+        ("day", td.days),
+        ("hour", hours),
+        ("minute", minutes),
+        ("second", seconds),
+    ]
+    text = []
+    for t in parts:
+        if t[1]:
+            text.append("%d %s%s" % (t[1], t[0], "s" if t[1] != 1 else ""))
+    return ", ".join(text)
+
+
+def set_report_announcements_for_user(request, couch_user):
+    key = ["type", ReportAnnouncement.__name__]
+    now = datetime.utcnow()
+    data = ReportAnnouncement.get_db().view('announcements/all_announcements',
+        reduce=False,
+        startkey=key+[now.isoformat()],
+        endkey=key+[{}]
+    ).all()
+    announce_ids = [a['id'] for a in data if a['id'] not in couch_user.announcements_seen]
+    for announcement_id in announce_ids:
+        try:
+            announcement = ReportAnnouncement.get(announcement_id)
+            messages.info(request, announcement.as_html)
+        except Exception as e:
+            logging.error("Could not fetch Report Announcement: %s" % e)
+
+
+# Copied from http://djangosnippets.org/snippets/1170/
+def batch_qs(qs, batch_size=1000):
+    """
+    Returns a (start, end, total, queryset) tuple for each batch in the given
+    queryset.
+
+    Usage:
+        # Make sure to order your querset
+        article_qs = Article.objects.order_by('id')
+        for start, end, total, qs in batch_qs(article_qs):
+            print "Now processing %s - %s of %s" % (start + 1, end, total)
+            for article in qs:
+                print article.body
+    """
+    total = qs.count()
+    for start in range(0, total, batch_size):
+        end = min(start + batch_size, total)
+        yield (start, end, total, qs[start:end])
+
+def stream_qs(qs, batch_size=1000):
+    for _, _, _, qs in batch_qs(qs, batch_size):
+        for item in qs:
+            yield item

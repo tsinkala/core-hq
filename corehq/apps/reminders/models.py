@@ -1,6 +1,6 @@
 import pytz
 from pytz import timezone
-from datetime import timedelta, datetime, date
+from datetime import timedelta, datetime, date, time
 import re
 from couchdbkit.ext.django.schema import *
 from django.conf import settings
@@ -15,6 +15,17 @@ from corehq.apps.smsforms.models import XFormsSession
 from corehq.apps.smsforms.app import start_session
 from corehq.apps.app_manager.models import get_app, Form
 from corehq.apps.sms.util import format_message_list
+from corehq.apps.reminders.util import get_form_name
+from touchforms.formplayer.api import current_question
+from corehq.apps.sms.mixin import VerifiedNumber
+from couchdbkit.exceptions import ResourceConflict
+from corehq.apps.sms.util import create_task, close_task, update_task
+from corehq.apps.smsforms.app import submit_unfinished_form
+from corehq.apps.ivr.api import initiate_outbound_call
+from dimagi.utils.couch import LockableMixIn
+
+
+METHOD_CHOICES = ["sms", "email", "test", "callback", "callback_test", "survey", "ivr_survey"]
 
 REPEAT_SCHEDULE_INDEFINITELY = -1
 
@@ -28,15 +39,32 @@ UI_CHOICES = [UI_SIMPLE_FIXED, UI_COMPLEX]
 
 RECIPIENT_USER = "USER"
 RECIPIENT_CASE = "CASE"
-RECIPIENT_CHOICES = [RECIPIENT_USER, RECIPIENT_CASE]
+RECIPIENT_SURVEY_SAMPLE = "SURVEY_SAMPLE"
+RECIPIENT_CHOICES = [RECIPIENT_USER, RECIPIENT_CASE, RECIPIENT_SURVEY_SAMPLE]
 
 MATCH_EXACT = "EXACT"
 MATCH_REGEX = "REGEX"
 MATCH_ANY_VALUE = "ANY_VALUE"
 MATCH_TYPE_CHOICES = [MATCH_EXACT, MATCH_REGEX, MATCH_ANY_VALUE]
 
+CASE_CRITERIA = "CASE_CRITERIA"
+ON_DATETIME = "ON_DATETIME"
+START_CONDITION_TYPES = [CASE_CRITERIA, ON_DATETIME]
+
+SURVEY_METHOD_LIST = ["SMS","CATI"]
+
+UI_FREQUENCY_ADVANCED = "ADVANCED"
+UI_FREQUENCY_CHOICES = [UI_FREQUENCY_ADVANCED]
+
 def is_true_value(val):
     return val == 'ok' or val == 'OK'
+
+def looks_like_timestamp(value):
+    try:
+        regex = re.compile("^\d\d\d\d-\d\d-\d\d.*$")
+        return (regex.match(value) is not None)
+    except Exception:
+        return False
 
 class MessageVariable(object):
     def __init__(self, variable):
@@ -83,8 +111,6 @@ class Message(object):
         if isinstance(template, str):
             template = unicode(template, encoding='utf-8')
         return unicode(cls(template, **params))
-    
-METHOD_CHOICES = ["sms", "email", "test", "callback", "callback_test", "survey"]
 
 class CaseReminderEvent(DocumentSchema):
     """
@@ -227,17 +253,35 @@ class CaseReminderHandler(Document):
     method = StringProperty(choices=METHOD_CHOICES, default="sms")
     ui_type = StringProperty(choices=UI_CHOICES, default=UI_SIMPLE_FIXED)
     recipient = StringProperty(choices=RECIPIENT_CHOICES, default=RECIPIENT_USER)
+    ui_frequency = StringProperty(choices=UI_FREQUENCY_CHOICES, default=UI_FREQUENCY_ADVANCED) # This will be used to simplify the scheduling process in the ui
+    sample_id = StringProperty()
     
-    # Attributes which define the reminder schedule
+    # Only applies when method is "survey".
+    # If this is True, on the last survey timeout, instead of resending the current question, 
+    # it will submit the form for the recipient with whatever is completed up to that point.
+    submit_partial_forms = BooleanProperty(default=False)
+    survey_incentive = StringProperty()
+    
+    # start condition
+    start_condition_type = StringProperty(choices=START_CONDITION_TYPES, default=CASE_CRITERIA)
+    
+    # used when start_condition_type == ON_DATETIME
+    start_datetime = DateTimeProperty()
+    
+    # used when start_condition_type == CASE_CRITERIA
     start_property = StringProperty()
     start_value = StringProperty()
     start_date = StringProperty()
     start_offset = IntegerProperty()
     start_match_type = StringProperty(choices=MATCH_TYPE_CHOICES)
+    
+    # reminder schedule
     events = SchemaListProperty(CaseReminderEvent)
     schedule_length = IntegerProperty()
     event_interpretation = StringProperty(choices=EVENT_INTERPRETATIONS, default=EVENT_AS_OFFSET)
     max_iteration_count = IntegerProperty()
+    
+    # stop condition
     until = StringProperty()
     
     @classmethod
@@ -267,7 +311,7 @@ class CaseReminderHandler(Document):
             include_docs=True,
         ).all()
 
-    def spawn_reminder(self, case, now):
+    def spawn_reminder(self, case, now, recipient=None):
         """
         Creates a CaseReminder.
         
@@ -277,23 +321,31 @@ class CaseReminderHandler(Document):
         
         return  The CaseReminder
         """
-        if self.recipient == RECIPIENT_USER:
-            recipient = CommCareUser.get_by_user_id(case.user_id)
-        else:
-            recipient = CommConnectCase.get(case._id)
+        if recipient is None:
+            if self.recipient == RECIPIENT_USER:
+                recipient = CommCareUser.get_by_user_id(case.user_id)
+            else:
+                recipient = CommConnectCase.get(case._id)
         local_now = CaseReminderHandler.utc_to_local(recipient, now)
+        
+        case_id = case._id if case is not None else None
+        user_id = case.user_id if case is not None else None
+        sample_id = recipient._id if self.recipient == RECIPIENT_SURVEY_SAMPLE else None
+        
         reminder = CaseReminder(
             domain=self.domain,
-            case_id=case._id,
+            case_id=case_id,
             handler_id=self._id,
-            user_id=case.user_id,
+            user_id=user_id,
             method=self.method,
             active=True,
             start_date=date(now.year, now.month, now.day) if (now.hour == 0 and now.minute == 0 and now.second == 0 and now.microsecond == 0) else date(local_now.year,local_now.month,local_now.day),
             schedule_iteration_num=1,
             current_event_sequence_num=0,
             callback_try_count=0,
-            callback_received=False
+            callback_received=False,
+            sample_id=sample_id,
+            xforms_session_ids=[],
         )
         # Set the first fire time appropriately
         if self.event_interpretation == EVENT_AS_OFFSET:
@@ -360,11 +412,10 @@ class CaseReminderHandler(Document):
         reminder.current_event_sequence_num += 1
         reminder.callback_try_count = 0
         reminder.callback_received = False
+        reminder.xforms_session_ids = []
         if reminder.current_event_sequence_num >= len(self.events):
             reminder.current_event_sequence_num = 0
             reminder.schedule_iteration_num += 1
-            if (self.max_iteration_count != REPEAT_SCHEDULE_INDEFINITELY) and (reminder.schedule_iteration_num > self.max_iteration_count):
-                reminder.active = False
 
     def set_next_fire(self, reminder, now):
         """
@@ -380,33 +431,53 @@ class CaseReminderHandler(Document):
         
         return      void
         """
+        case = reminder.case
+        iteration = 0
         while now >= reminder.next_fire and reminder.active:
+            iteration += 1
             # If it is a callback reminder, check the callback_timeout_intervals
-            if (reminder.method == "callback" or reminder.method == "callback_test") and len(reminder.current_event.callback_timeout_intervals) > 0:
+            if (reminder.method in ["callback", "callback_test", "survey"]) and len(reminder.current_event.callback_timeout_intervals) > 0:
+                #reminder.callback_received is always False for surveys, so it only has an effect for callbacks
                 if reminder.callback_received or reminder.callback_try_count >= len(reminder.current_event.callback_timeout_intervals):
-                    pass
+                    if self.method == "survey" and self.submit_partial_forms and iteration > 1:
+                        # This is to make sure we submit the unfinished forms even when fast-forwarding to the next event after system downtime
+                        for session_id in reminder.xforms_session_ids:
+                            submit_unfinished_form(session_id)
                 else:
                     reminder.next_fire = reminder.next_fire + timedelta(minutes = reminder.current_event.callback_timeout_intervals[reminder.callback_try_count])
                     reminder.callback_try_count += 1
                     continue
-            # Move to the next event in the cycle and set the next fire if it is still active
+            
+            # Move to the next event in the cycle
             self.move_to_next_event(reminder)
-            if reminder.active:
-                if self.event_interpretation == EVENT_AS_OFFSET:
-                    # EVENT_AS_OFFSET
-                    next_event = reminder.current_event
-                    day_offset = next_event.day_num
-                    if reminder.current_event_sequence_num == 0:
-                        day_offset += self.schedule_length
-                    time_offset = next_event.fire_time
-                    reminder.next_fire += timedelta(days=day_offset, hours=time_offset.hour, minutes=time_offset.minute, seconds=time_offset.second)
-                else:
-                    # EVENT_AS_SCHEDULE
-                    next_event = reminder.current_event
-                    day_offset = self.start_offset + (self.schedule_length * (reminder.schedule_iteration_num - 1)) + next_event.day_num
-                    reminder_datetime = datetime.combine(reminder.start_date, next_event.fire_time) + timedelta(days = day_offset)
-                    reminder.next_fire = CaseReminderHandler.timestamp_to_utc(reminder.recipient, reminder_datetime)
-
+            
+            # Set the next fire time
+            if self.event_interpretation == EVENT_AS_OFFSET:
+                # EVENT_AS_OFFSET
+                next_event = reminder.current_event
+                day_offset = next_event.day_num
+                if reminder.current_event_sequence_num == 0:
+                    day_offset += self.schedule_length
+                time_offset = next_event.fire_time
+                reminder.next_fire += timedelta(days=day_offset, hours=time_offset.hour, minutes=time_offset.minute, seconds=time_offset.second)
+            else:
+                # EVENT_AS_SCHEDULE
+                next_event = reminder.current_event
+                day_offset = self.start_offset + (self.schedule_length * (reminder.schedule_iteration_num - 1)) + next_event.day_num
+                reminder_datetime = datetime.combine(reminder.start_date, next_event.fire_time) + timedelta(days = day_offset)
+                reminder.next_fire = CaseReminderHandler.timestamp_to_utc(reminder.recipient, reminder_datetime)
+            
+            # Set whether or not the reminder should still be active
+            reminder.active = self.get_active(reminder, reminder.next_fire, case)
+    
+    def get_active(self, reminder, now, case):
+        schedule_not_finished = not (self.max_iteration_count != REPEAT_SCHEDULE_INDEFINITELY and reminder.schedule_iteration_num > self.max_iteration_count)
+        if case is not None:
+            until_not_reached = (not self.condition_reached(case, self.until, now))
+            return until_not_reached and schedule_not_finished
+        else:
+            return schedule_not_finished
+    
     def should_fire(self, reminder, now):
         return now > reminder.next_fire
 
@@ -433,34 +504,74 @@ class CaseReminderHandler(Document):
         except Exception:
             lang = None
         
-        if reminder.method == "survey":
-            # Close all currently open sessions
-            sessions = XFormsSession.view("smsforms/open_sessions_by_connection",
-                                         key=[reminder.domain, recipient.get_id],
-                                         include_docs=True).all()
-            for session in sessions:
-                session.end(False)
-                session.save()
-            
-            # Start the new session
-            try:
-                form_unique_id = reminder.current_event.form_unique_id
-                form = Form.get_form(form_unique_id)
-                app = form.get_app()
-                module = form.get_module()
-            except Exception as e:
-                print e
-                print "ERROR: Could not load survey form for handler " + reminder.handler_id + ", event " + str(reminder.current_event_sequence_num)
-                return False
-            session, responses = start_session(reminder.domain, recipient, app, module, form, reminder.case_id)
-            
-            # Send out first message
-            if len(responses) > 0:
-                message = format_message_list(responses)
-                if verified_number is not None:
-                    return send_sms_to_verified_number(verified_number, message)
+        if reminder.method == "ivr_survey":
+            if verified_number is not None:
+                initiate_outbound_call(verified_number, reminder.current_event.form_unique_id)
+            return True
+        elif reminder.method == "survey":
+            if reminder.callback_try_count > 0:
+                if self.submit_partial_forms and (reminder.callback_try_count == len(reminder.current_event.callback_timeout_intervals)):
+                    for session_id in reminder.xforms_session_ids:
+                        submit_unfinished_form(session_id)
                 else:
-                    return True
+                    for session_id in reminder.xforms_session_ids:
+                        session = XFormsSession.view("smsforms/sessions_by_touchforms_id",
+                                                        startkey=[session_id],
+                                                        endkey=[session_id, {}],
+                                                        include_docs=True).one()
+                        if session.end_time is None:
+                            vn = VerifiedNumber.view("sms/verified_number_by_owner_id",
+                                                      key=session.connection_id,
+                                                      include_docs=True).one()
+                            if vn is not None:
+                                resp = current_question(session_id)
+                                send_sms_to_verified_number(vn, resp.event.text_prompt)
+                return True
+            else:
+                recipients = []
+                if self.recipient == RECIPIENT_CASE:
+                    recipients = [reminder.recipient]
+                elif self.recipient == RECIPIENT_SURVEY_SAMPLE:
+                    recipients = [CommConnectCase.get(case_id) for case_id in reminder.recipient.contacts]
+                
+                reminder.xforms_session_ids = []
+                
+                for recipient in recipients:
+                    # Close all currently open sessions
+                    sessions = XFormsSession.view("smsforms/open_sessions_by_connection",
+                                                 key=[reminder.domain, recipient.get_id],
+                                                 include_docs=True).all()
+                    for session in sessions:
+                        session.end(False)
+                        session.save()
+                    
+                    # Start the new session
+                    try:
+                        form_unique_id = reminder.current_event.form_unique_id
+                        form = Form.get_form(form_unique_id)
+                        app = form.get_app()
+                        module = form.get_module()
+                    except Exception as e:
+                        logging.exception("ERROR: Could not load survey form for handler " + reminder.handler_id + ", event " + str(reminder.current_event_sequence_num))
+                        return False
+                    session, responses = start_session(reminder.domain, recipient, app, module, form, recipient.get_id)
+                    session.survey_incentive = self.survey_incentive
+                    session.save()
+                    reminder.xforms_session_ids.append(session.session_id)
+                    
+                    # Send out first message
+                    if len(responses) > 0:
+                        message = format_message_list(responses)
+                        verified_number = recipient.get_verified_number()
+                        if len(recipients) == 1:
+                            if verified_number is not None:
+                                return send_sms_to_verified_number(verified_number, message)
+                            else:
+                                return True
+                        else:
+                            send_sms_to_verified_number(verified_number, message)
+                    
+                return True
         else:
             # If it is a callback reminder and the callback has been received, skip sending the next timeout message
             if (reminder.method == "callback" or reminder.method == "callback_test") and len(reminder.current_event.callback_timeout_intervals) > 0 and (reminder.callback_try_count > 0):
@@ -509,23 +620,36 @@ class CaseReminderHandler(Document):
         
         case            The CommCareCase to check.
         case_property   The property on CommCareCase to check.
-        now             The timestamp to use when comparing, if case[case_property] is a timestamp.
+        now             The timestamp to use when comparing, if case.case_property is a timestamp.
         
         return      True if the condition is reached, False if not.
         """
         condition = case.get_case_property(case_property)
-        try: condition = string_to_datetime(condition)
-        except Exception:
+        
+        if isinstance(condition, datetime):
             pass
-
-        if (isinstance(condition, datetime) and condition > now) or is_true_value(condition):
+        elif isinstance(condition, date):
+            condition = datetime.combine(condition, time(0,0))
+        elif looks_like_timestamp(condition):
+            try:
+                condition = parse(condition)
+            except Exception:
+                pass
+        
+        if isinstance(condition, datetime) and getattr(condition, "tzinfo") is not None:
+            condition = condition.astimezone(pytz.utc)
+            condition = condition.replace(tzinfo=None)
+        
+        if (isinstance(condition, datetime) and now > condition) or is_true_value(condition):
             return True
         else:
             return False
 
     def case_changed(self, case, now=None):
         """
-        This method is called every time a CommCareCase is saved and matches this
+        This method is used to manage updates to CaseReminderHandler's whose start_condition_type == CASE_CRITERIA.
+        
+        This method is also called every time a CommCareCase is saved and matches this
         CaseReminderHandler's domain and case_type. It's used to check for the
         "start" and "until" conditions in order to spawn or deactivate a CaseReminder
         for the CommCareCase.
@@ -592,32 +716,67 @@ class CaseReminderHandler(Document):
                     reminder.retire()
                     reminder = None
             
+            # Spawn a reminder if need be
             if reminder is None:
                 if start_condition_reached:
                     reminder = self.spawn_reminder(case, start)
                     reminder.start_condition_datetime = start_condition_datetime
                     self.set_next_fire(reminder, now) # This will fast-forward to the next event that does not occur in the past
-            else:
-                active = (not self.condition_reached(case, self.until, now)) and not (reminder.handler.max_iteration_count != REPEAT_SCHEDULE_INDEFINITELY and reminder.schedule_iteration_num > reminder.handler.max_iteration_count)
+            
+            # Check to see if the reminder should still be active
+            if reminder is not None:
+                active = self.get_active(reminder, reminder.next_fire, case)
                 if active and not reminder.active:
                     reminder.active = True
                     self.set_next_fire(reminder, now) # This will fast-forward to the next event that does not occur in the past
                 else:
                     reminder.active = active
-            if reminder:
+                
                 reminder.save()
-
+    
+    def datetime_definition_changed(self):
+        """
+        This method is used to manage updates to CaseReminderHandler's whose start_condition_type == ON_DATETIME.
+        """
+        reminder = CaseReminder.view('reminders/by_domain_handler_case',
+            startkey=[self.domain, self._id],
+            endkey=[self.domain, self._id, {}],
+            include_docs=True
+        ).one()
+        
+        now = self.get_now()
+        
+        if self.recipient == RECIPIENT_SURVEY_SAMPLE:
+            recipient = SurveySample.get(self.sample_id)
+        else:
+            # TODO: Need to support sending directly to users / cases without case criteria being set
+            recipient = None
+        
+        if reminder is not None and reminder.start_condition_datetime != self.start_datetime:
+            reminder.retire()
+            reminder = None
+        
+        if reminder is None:
+            reminder = self.spawn_reminder(None, self.start_datetime, recipient)
+            reminder.start_condition_datetime = self.start_datetime
+            self.set_next_fire(reminder, now) # This will fast-forward to the next event that does not occur in the past
+            reminder.save()
+    
     def save(self, **params):
         super(CaseReminderHandler, self).save(**params)
         if not self.deleted():
-            cases = CommCareCase.view('hqcase/types_by_domain',
-                reduce=False,
-                startkey=[self.domain],
-                endkey=[self.domain, {}],
-                include_docs=True,
-            ).all()
-            for case in cases:
-                self.case_changed(case)
+            if self.start_condition_type == CASE_CRITERIA:
+                cases = CommCareCase.view('hqcase/types_by_domain',
+                    reduce=False,
+                    startkey=[self.domain],
+                    endkey=[self.domain, {}],
+                    include_docs=True,
+                ).all()
+                for case in cases:
+                    self.case_changed(case)
+            elif self.start_condition_type == ON_DATETIME:
+                self.datetime_definition_changed()
+    
     @classmethod
     def get_handlers(cls, domain, case_type=None):
         key = [domain]
@@ -647,10 +806,20 @@ class CaseReminderHandler(Document):
     def fire_reminders(cls, now=None):
         now = now or cls.get_now()
         for reminder in cls.get_all_reminders(due_before=now):
-            handler = reminder.handler
-            if handler.fire(reminder):
-                handler.set_next_fire(reminder, now)
-                reminder.save()
+            if reminder.acquire_lock(now) and now >= reminder.next_fire:
+                handler = reminder.handler
+                if handler.fire(reminder):
+                    handler.set_next_fire(reminder, now)
+                    try:
+                        reminder.save()
+                    except ResourceConflict:
+                        # Submitting a form updates the case, which can update the reminder.
+                        # Grab the latest version of the reminder and set the next fire if it's still in use.
+                        reminder = CaseReminder.get(reminder._id)
+                        if not reminder.retired:
+                            handler.set_next_fire(reminder, now)
+                            reminder.save()
+                reminder.release_lock()
 
     def retire(self):
         reminders = self.get_reminders()
@@ -663,7 +832,7 @@ class CaseReminderHandler(Document):
     def deleted(self):
         return self.doc_type != 'CaseReminderHandler'
 
-class CaseReminder(Document):
+class CaseReminder(Document, LockableMixIn):
     """
     Where the CaseReminderHandler is the rule and schedule for sending out reminders,
     a CaseReminder is an instance of that rule as it is being applied to a specific
@@ -685,7 +854,9 @@ class CaseReminder(Document):
     callback_try_count = IntegerProperty()          # Keeps track of the number of times a callback has timed out
     callback_received = BooleanProperty()           # True if the expected callback was received since the last SMS was sent, False if not
     start_condition_datetime = DateTimeProperty()   # The date and time matching the case property specified by the CaseReminderHandler.start_condition
-
+    sample_id = StringProperty()
+    xforms_session_ids = ListProperty(StringProperty)
+    
     @property
     def handler(self):
         return CaseReminderHandler.get(self.handler_id)
@@ -696,7 +867,10 @@ class CaseReminder(Document):
 
     @property
     def case(self):
-        return CommCareCase.get(self.case_id)
+        if self.case_id is not None:
+            return CommCareCase.get(self.case_id)
+        else:
+            return None
 
     @property
     def user(self):
@@ -711,11 +885,18 @@ class CaseReminder(Document):
 
     @property
     def recipient(self):
-        if self.handler.recipient == RECIPIENT_USER:
+        handler = self.handler
+        if handler.recipient == RECIPIENT_USER:
             return self.user
-        else:
+        elif handler.recipient == RECIPIENT_CASE:
             return CommConnectCase.get(self.case_id)
-
+        else:
+            return SurveySample.get(self.sample_id)
+    
+    @property
+    def retired(self):
+        return self.doc_type.endswith("-Deleted")
+    
     def retire(self):
         self.doc_type += "-Deleted"
         self.save()
@@ -732,19 +913,7 @@ class SurveyKeyword(Document):
     
     @property
     def survey_name(self):
-        form = Form.get_form(self.form_unique_id)
-        app = form.get_app()
-        module = form.get_module()
-        lang = app.langs[0]
-        try:
-            module_name = module.name[lang]
-        except Exception:
-            module_name = module.name.items()[0][1]
-        try:
-            form_name = form.name[lang]
-        except Exception:
-            form_name = form.name.items()[0][1]
-        return app.name + "/" + module_name + "/" + form_name
+        return get_form_name(self.form_unique_id)
     
     @property
     def get_id(self):
@@ -764,5 +933,136 @@ class SurveyKeyword(Document):
             key = [domain, keyword.upper()],
             include_docs=True
         ).one()
+
+class SurveySample(Document):
+    domain = StringProperty()
+    name = StringProperty()
+    contacts = ListProperty(StringProperty)
+    time_zone = StringProperty()
+    
+    def get_time_zone(self):
+        return self.time_zone
+    
+    @classmethod
+    def get_all(cls, domain):
+        return cls.view('reminders/sample_by_domain',
+            startkey=[domain],
+            endkey=[domain, {}],
+            include_docs=True
+        ).all()
+
+class SurveyWave(DocumentSchema):
+    date = DateProperty()
+    time = TimeProperty()
+    end_date = DateProperty()
+    form_id = StringProperty()
+    reminder_definitions = DictProperty() # Dictionary of SurveySample._id : CaseReminderHandler._id
+    delegation_tasks = DictProperty() # Dictionary of {sample id : {contact id : delegation task id, ...}, ...}
+    
+    def has_started(self, parent_survey_ref):
+        samples = [SurveySample.get(sample["sample_id"]) for sample in parent_survey_ref.samples]
+        for sample in samples:
+            if CaseReminderHandler.timestamp_to_utc(sample, datetime.combine(self.date, self.time)) <= datetime.utcnow():
+                return True
+        return False
+
+class Survey(Document):
+    domain = StringProperty()
+    name = StringProperty()
+    waves = SchemaListProperty(SurveyWave)
+    followups = ListProperty(DictProperty)
+    samples = ListProperty(DictProperty)
+    send_automatically = BooleanProperty()
+    send_followup = BooleanProperty()
+    
+    @classmethod
+    def get_all(cls, domain):
+        return cls.view('reminders/survey_by_domain',
+            startkey=[domain],
+            endkey=[domain, {}],
+            include_docs=True
+        ).all()
+    
+    def has_started(self):
+        for wave in self.waves:
+            if wave.has_started(self):
+                return True
+        return False
+    
+    def update_delegation_tasks(self, submitting_user_id):
+        utcnow = datetime.utcnow()
+        
+        # Get info about each CATI sample and the instance of that sample used for this survey
+        cati_sample_data = {}
+        for sample_json in self.samples:
+            if sample_json["method"] == "CATI":
+                sample_id = sample_json["sample_id"]
+                cati_sample_data[sample_id] = {
+                    "sample_object" : SurveySample.get(sample_id),
+                    "incentive" : sample_json["incentive"],
+                    "cati_operator" : sample_json["cati_operator"],
+                }
+        
+        for wave in self.waves:
+            if wave.has_started(self):
+                continue
+            
+            # Close any tasks for samples that are no longer used, and for contacts that are no longer in the samples
+            for sample_id, tasks in wave.delegation_tasks.items():
+                if sample_id not in cati_sample_data:
+                    for case_id, delegation_case_id in tasks.items():
+                        close_task(self.domain, delegation_case_id, submitting_user_id)
+                    del wave.delegation_tasks[sample_id]
+                else:
+                    for case_id in list(set(tasks.keys()).difference(cati_sample_data[sample_id]["sample_object"].contacts)):
+                        close_task(self.domain, tasks[case_id], submitting_user_id)
+                        del wave.delegation_tasks[sample_id][case_id]
+            
+            # Update / Create tasks for existing / new contacts
+            for sample_id, sample_data in cati_sample_data.items():
+                task_activation_datetime = CaseReminderHandler.timestamp_to_utc(sample_data["sample_object"], datetime.combine(wave.date, wave.time))
+                task_deactivation_datetime = CaseReminderHandler.timestamp_to_utc(sample_data["sample_object"], datetime.combine(wave.end_date, wave.time))
+                if sample_id not in wave.delegation_tasks:
+                    wave.delegation_tasks[sample_id] = {}
+                    for case_id in sample_data["sample_object"].contacts:
+                        wave.delegation_tasks[sample_id][case_id] = create_task(
+                            CommCareCase.get(case_id), 
+                            submitting_user_id, 
+                            sample_data["cati_operator"], 
+                            wave.form_id, 
+                            task_activation_datetime,
+                            task_deactivation_datetime,
+                            sample_data["incentive"]
+                        )
+                else:
+                    for case_id in sample_data["sample_object"].contacts:
+                        delegation_case_id = wave.delegation_tasks[sample_id].get(case_id, None)
+                        if delegation_case_id is None:
+                            wave.delegation_tasks[sample_id][case_id] = create_task(
+                                CommCareCase.get(case_id), 
+                                submitting_user_id, 
+                                sample_data["cati_operator"], 
+                                wave.form_id, 
+                                task_activation_datetime, 
+                                task_deactivation_datetime,
+                                sample_data["incentive"]
+                            )
+                        else:
+                            delegation_case = CommCareCase.get(delegation_case_id)
+                            if (delegation_case.owner_id != sample_data["cati_operator"] or
+                            delegation_case.get_case_property("start_date") != task_activation_datetime or
+                            delegation_case.get_case_property("end_date") != task_deactivation_datetime or
+                            delegation_case.get_case_property("form_id") != wave.form_id):
+                                update_task(
+                                    self.domain, 
+                                    delegation_case_id, 
+                                    submitting_user_id, 
+                                    sample_data["cati_operator"], 
+                                    wave.form_id, 
+                                    task_activation_datetime, 
+                                    task_deactivation_datetime,
+                                    sample_data["incentive"]
+                                )
+
 
 from .signals import *

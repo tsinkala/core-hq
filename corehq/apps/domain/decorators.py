@@ -114,6 +114,7 @@ def login_or_digest_ex(allow_cc_users=False):
 login_or_digest = login_or_digest_ex()
 
 # For views that are inside a class
+# todo where is this being used? can be replaced with decorator below
 def cls_login_and_domain_required(func):
     def __outer__(cls, request, domain, *args, **kwargs):
         @login_and_domain_required
@@ -121,6 +122,29 @@ def cls_login_and_domain_required(func):
             return func(cls, request, domain, *args, **kwargs)
         return __inner__(request, domain, *args, **kwargs)
     return __outer__
+
+def cls_to_view(additional_decorator=None):
+    def decorator(func):
+        def __outer__(cls, request, *args, **kwargs):
+            domain = kwargs.get('domain')
+            new_kwargs = kwargs.copy()
+            if not domain:
+                try:
+                    domain = args[0]
+                except IndexError:
+                    pass
+            else:
+                del new_kwargs['domain']
+
+            def __inner__(request, domain, *args, **new_kwargs):
+                return func(cls, request, *args, **kwargs)
+
+            if additional_decorator:
+                return additional_decorator(__inner__)(request, domain, *args, **new_kwargs)
+            else:
+                return __inner__(request, domain, *args, **new_kwargs)
+        return __outer__
+    return decorator
 
 # when requiring a specific domain
 def require_domain(domain):
@@ -185,8 +209,12 @@ def domain_admin_required_ex( redirect_page_name = None ):
         redirect_page_name = getattr(settings, 'DOMAIN_NOT_ADMIN_REDIRECT_PAGE_NAME', 'homepage')                                                                                                 
     def _outer( view_func ): 
         def _inner(request, domain, *args, **kwargs):
+            if not hasattr(request, 'couch_user'):
+                raise Http404
+            if not request.couch_user.is_web_user():
+                raise Http404
             domain_name, domain = load_domain(request, domain)
-            if not request.couch_user.is_domain_admin:
+            if not request.couch_user.is_domain_admin(domain_name):
                 return HttpResponseRedirect(reverse(redirect_page_name))
             return view_func(request, domain_name, *args, **kwargs)
 
@@ -200,15 +228,19 @@ def domain_admin_required_ex( redirect_page_name = None ):
 
 # Parallel to what we did with login_and_domain_required, above
 domain_admin_required = domain_admin_required_ex()
+cls_domain_admin_required = cls_to_view(additional_decorator=domain_admin_required)
 
 ########################################################################################################
     
 require_superuser = permission_required("is_superuser")
+cls_require_superusers = cls_to_view(additional_decorator=require_superuser)
 
 def require_previewer(view_func):
     def shim(request, *args, **kwargs):
-        if not request.couch_user.is_previewer():
+        if not hasattr(request, 'couch_user') or not request.couch_user.is_previewer():
             raise Http404
         else:
             return view_func(request, *args, **kwargs)
     return shim
+
+cls_require_previewer = cls_to_view(additional_decorator=require_previewer)
