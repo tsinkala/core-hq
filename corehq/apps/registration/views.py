@@ -3,7 +3,6 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login
 from django.db import transaction
-from django.forms.forms import Form
 from django.http import HttpResponseRedirect
 from django.shortcuts import redirect
 from corehq.apps.domain.decorators import login_required_late_eval_of_LOGIN_URL
@@ -12,6 +11,7 @@ from corehq.apps.orgs.views import orgs_landing
 from corehq.apps.registration.models import RegistrationRequest
 from corehq.apps.registration.forms import NewWebUserRegistrationForm, DomainRegistrationForm, OrganizationRegistrationForm
 from corehq.apps.registration.utils import *
+from dimagi.utils.couch.resource_conflict import retry_resource
 from dimagi.utils.web import render_to_response, get_ip
 from corehq.apps.domain.decorators import require_superuser
 from corehq.apps.orgs.models import Organization
@@ -30,7 +30,7 @@ def register_user(request):
         if request.method == 'POST': # If the form has been submitted...
             form = NewWebUserRegistrationForm(request.POST) # A form bound to the POST data
             if form.is_valid(): # All validation rules pass
-                activate_new_user(form)
+                activate_new_user(form, ip=get_ip(request))
                 new_user = authenticate(username=form.cleaned_data['email'],
                                         password=form.cleaned_data['password'])
                 login(request, new_user)
@@ -208,3 +208,15 @@ def confirm_domain(request, guid=None):
     vals['message_body'] = 'Your account has been successfully activated. Thank you for taking the time to confirm your email address: %s.' % requesting_user.username
     vals['is_error'] = False
     return render_to_response(request, 'registration/confirmation_complete.html', vals)
+
+@retry_resource(3)
+def eula_agreement(request):
+    if request.method == 'POST':
+        current_user = CouchUser.from_django_user(request.user)
+        current_user.eula.signed = True
+        current_user.eula.date = datetime.utcnow()
+        current_user.eula.type = 'End User License Agreement'
+        current_user.eula.user_ip = get_ip(request)
+        current_user.save()
+
+    return HttpResponseRedirect(request.POST.get('next', '/'))

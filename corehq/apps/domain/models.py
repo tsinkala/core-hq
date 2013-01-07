@@ -3,11 +3,14 @@ import json
 import logging
 from couchdbkit.exceptions import ResourceConflict
 from django.conf import settings
+from django.contrib.auth.models import AnonymousUser
 from django.db import models
 from couchdbkit.ext.django.schema import Document, StringProperty,\
     BooleanProperty, DateTimeProperty, IntegerProperty, DocumentSchema, SchemaProperty, DictProperty, ListProperty
 from django.utils.safestring import mark_safe
-from corehq.apps.appstore.models import Review
+from corehq.apps.appstore.models import Review, SnapshotMixin
+from dimagi.utils.html import format_html
+from dimagi.utils.logging import notify_exception
 from dimagi.utils.timezones import fields as tz_fields
 from dimagi.utils.couch.database import get_db
 from itertools import chain
@@ -40,7 +43,7 @@ class DomainMigrations(DocumentSchema):
             domain.save()
 
 LICENSES = {
-    'public': 'Public Domain',
+#    'public': 'Public Domain', # public domain license is no longer being supported
     'cc': 'Creative Commons Attribution',
     'cc-sa': 'Creative Commons Attribution, Share Alike',
     'cc-nd': 'Creative Commons Attribution, No Derivatives',
@@ -112,7 +115,26 @@ class HQBillingDomainMixin(DocumentSchema):
         self.currency_code = kwargs.get('currency_code', settings.DEFAULT_CURRENCY)
 
 
-class Domain(Document, HQBillingDomainMixin):
+class Deployment(DocumentSchema):
+    date = DateTimeProperty()
+    city = StringProperty()
+    country = StringProperty()
+    region = StringProperty() # e.g. US, LAC, SA, Sub-saharn Africa, East Africa, West Africa, Southeast Asia)
+    description = StringProperty()
+    public = BooleanProperty(default=False)
+
+    def update(self, new_dict):
+        for kw in new_dict:
+            self[kw] = new_dict[kw]
+
+class LicenseAgreement(DocumentSchema):
+    signed = BooleanProperty(default=False)
+    type = StringProperty()
+    date = DateTimeProperty()
+    user_id = StringProperty()
+    user_ip = StringProperty()
+
+class Domain(Document, HQBillingDomainMixin, SnapshotMixin):
     """Domain is the highest level collection of people/stuff
        in the system.  Pretty much everything happens at the
        domain-level, including user membership, permission to
@@ -126,32 +148,33 @@ class Domain(Document, HQBillingDomainMixin):
     case_sharing = BooleanProperty(default=False)
     organization = StringProperty()
     slug = StringProperty() # the slug for this project namespaced within an organization
+    eula = SchemaProperty(LicenseAgreement)
 
     # domain metadata
-    city = StringProperty()
-    country = StringProperty()
-    region = StringProperty() # e.g. US, LAC, SA, Sub-saharn Africa, East Africa, West Africa, Southeast Asia)
     project_type = StringProperty() # e.g. MCH, HIV
     customer_type = StringProperty() # plus, full, etc.
     is_test = BooleanProperty(default=False)
     description = StringProperty()
     short_description = StringProperty()
     is_shared = BooleanProperty(default=False)
+    commtrack_enabled = BooleanProperty(default=False)
+    survey_management_enabled = BooleanProperty(default=False)
 
     # exchange/domain copying stuff
-    original_doc = StringProperty()
-    original_doc_display_name = StringProperty()
     is_snapshot = BooleanProperty(default=False)
     is_approved = BooleanProperty(default=False)
     snapshot_time = DateTimeProperty()
     published = BooleanProperty(default=False)
-    license = StringProperty(choices=LICENSES, default='public')
+    license = StringProperty(choices=LICENSES, default='cc')
     title = StringProperty()
-
+    cda = SchemaProperty(LicenseAgreement)
+    multimedia_included = BooleanProperty(default=True)
+    downloads = IntegerProperty(default=0)
     author = StringProperty()
-    deployment_date = DateTimeProperty()
     phone_model = StringProperty()
     attribution_notes = StringProperty()
+
+    deployment = SchemaProperty(Deployment)
 
     image_path = StringProperty()
     image_type = StringProperty()
@@ -165,18 +188,37 @@ class Domain(Document, HQBillingDomainMixin):
 
     @classmethod
     def wrap(cls, data):
+        # for domains that still use original_doc
+        should_save = False
+        if data.has_key('original_doc'):
+            original_doc = data['original_doc']
+            del data['original_doc']
+            should_save = True
+            if original_doc:
+                original_doc = Domain.get_by_name(data['original_doc'])
+                data['copy_history'] = [original_doc._id]
+
+        # for domains that have a public domain license
+        if data.has_key("license"):
+            if data.get("license", None) == "public":
+                data["license"] = "cc"
+                should_save = True
         self = super(Domain, cls).wrap(data)
         if self.get_id:
             self.apply_migrations()
+        if should_save:
+            self.save()
         return self
 
     @staticmethod
     def active_for_user(user, is_active=True):
-        if not hasattr(user,'get_profile'):
-            # this had better be an anonymous user
+        if isinstance(user, AnonymousUser):
             return []
         from corehq.apps.users.models import CouchUser
-        couch_user = CouchUser.from_django_user(user)
+        if isinstance(user, CouchUser):
+            couch_user = user
+        else:
+            couch_user = CouchUser.from_django_user(user)
         if couch_user:
             domain_names = couch_user.get_domains()
             return Domain.view("domain/by_status",
@@ -236,15 +278,22 @@ class Domain(Document, HQBillingDomainMixin):
                                     startkey=[self.name],
                                     endkey=[self.name, {}]).all()
 
-    def full_applications(self):
+    def full_applications(self, include_builds=True):
         from corehq.apps.app_manager.models import Application, RemoteApp
         WRAPPERS = {'Application': Application, 'RemoteApp': RemoteApp}
         def wrap_application(a):
             return WRAPPERS[a['doc']['doc_type']].wrap(a['doc'])
 
+        if include_builds:
+            startkey = [self.name]
+            endkey = [self.name, {}]
+        else:
+            startkey = [self.name, None]
+            endkey = [self.name, None, {}]
+
         return get_db().view('app_manager/applications',
-            startkey=[self.name],
-            endkey=[self.name, {}],
+            startkey=startkey,
+            endkey=endkey,
             include_docs=True,
             wrapper=wrap_application).all()
 
@@ -276,15 +325,19 @@ class Domain(Document, HQBillingDomainMixin):
         return False
 
     def recent_submissions(self):
-        res = get_db().view('reports/all_submissions',
-            startkey=[self.name, {}],
-            endkey=[self.name],
+        from corehq.apps.reports.util import make_form_couch_key
+        key = make_form_couch_key(self.name)
+        res = get_db().view('reports_forms/all_forms',
+            startkey=key+[{}],
+            endkey=key,
             descending=True,
             reduce=False,
             include_docs=False,
             limit=1).all()
         if len(res) > 0: # if there have been any submissions in the past 30 days
-            return datetime.now() <= datetime.strptime(res[0]['value']['time'], "%Y-%m-%dT%H:%M:%SZ") + timedelta(days=30)
+            return (datetime.now() <=
+                    datetime.strptime(res[0]['value']['submission_time'], "%Y-%m-%dT%H:%M:%SZ")
+                    + timedelta(days=30))
         else:
             return False
 
@@ -301,6 +354,22 @@ class Domain(Document, HQBillingDomainMixin):
 
     @classmethod
     def get_by_name(cls, name):
+        if not name:
+            # get_by_name should never be called with name as None (or '', etc)
+            # I fixed the code in such a way that if I raise a ValueError
+            # all tests pass and basic pages load,
+            # but in order not to break anything in the wild,
+            # I'm opting to notify by email if/when this happens
+            # but fall back to the previous behavior of returning None
+            try:
+                raise ValueError('%r is not a valid domain name' % name)
+            except ValueError:
+                if settings.DEBUG:
+                    raise
+                else:
+                    notify_exception(None, '%r is not a valid domain name' % name)
+                    return None
+
         result = cls.view("domain/domains",
                             key=name,
                             reduce=False,
@@ -371,10 +440,9 @@ class Domain(Document, HQBillingDomainMixin):
             new_domain_name = new_id
         new_domain = Domain.get(new_id)
         new_domain.name = new_domain_name
+        new_domain.copy_history = self.get_updated_history()
         new_domain.is_snapshot = False
         new_domain.snapshot_time = None
-        new_domain.original_doc = self.name
-        new_domain.original_doc_display_name = self.display_name()
         new_domain.organization = None # TODO: use current user's organization (?)
 
         for field in self._dirty_fields:
@@ -394,7 +462,7 @@ class Domain(Document, HQBillingDomainMixin):
         new_domain.save()
 
         if user:
-            user.add_domain_membership(new_domain_name)
+            user.add_domain_membership(new_domain_name, is_admin=True)
             user.save()
 
         return new_domain
@@ -408,6 +476,7 @@ class Domain(Document, HQBillingDomainMixin):
         db = get_db()
         if doc_type in ('Application', 'RemoteApp'):
             new_doc = import_app(id, new_domain_name)
+            new_doc.copy_history.append(id)
         else:
             cls = str_to_cls[doc_type]
             new_id = db.copy_doc(id)['id']
@@ -423,8 +492,6 @@ class Domain(Document, HQBillingDomainMixin):
                         delattr(new_doc, field)
 
             new_doc.domain = new_domain_name
-
-        new_doc.original_doc = id
 
         if self.is_snapshot and doc_type == 'Application':
             new_doc.clean_mapping()
@@ -442,37 +509,22 @@ class Domain(Document, HQBillingDomainMixin):
             copy.is_snapshot = True
             copy.organization = self.organization
             copy.snapshot_time = datetime.now()
+            del copy.deployment
             copy.save()
             return copy
-
-    def snapshot_of(self):
-        if self.is_snapshot:
-            return Domain.get_by_name(self.original_doc)
-        else:
-            return None
-
-    def copied_from(self):
-        original = Domain.get_by_name(self.original_doc)
-        if self.is_snapshot:
-            return original
-        else: # if this is a copy of a snapshot, we want the original, not the snapshot
-            return Domain.get_by_name(original.original_doc)
 
     def from_snapshot(self):
         return not self.is_snapshot and self.original_doc is not None
 
     def snapshots(self):
-        return Domain.view('domain/snapshots', startkey=[self.name, {}], endkey=[self.name], include_docs=True, descending=True)
+        return Domain.view('domain/snapshots', startkey=[self._id, {}], endkey=[self._id], include_docs=True, descending=True)
 
     def published_snapshot(self):
         snapshots = self.snapshots().all()
         for snapshot in snapshots:
             if snapshot.published:
                 return snapshot
-        if len(snapshots) > 0:
-            return snapshots[0]
-        else:
-            return None
+        return None
 
     @classmethod
     def published_snapshots(cls, include_unapproved=False, page=None, per_page=10):
@@ -506,32 +558,44 @@ class Domain(Document, HQBillingDomainMixin):
         else:
             return ''
 
+    def update_deployment(self, **kwargs):
+        self.deployment.update(kwargs)
+        self.save()
+
     def display_name(self):
         if self.is_snapshot:
-            return "Snapshot of %s" % self.copied_from().display_name()
+            return "Snapshot of %s" % self.copied_from.display_name()
         if self.organization:
             return self.slug
         else:
             return self.name
 
-    __str__ = display_name
-
     def long_display_name(self):
         if self.is_snapshot:
-            return "Snapshot of %s &gt; %s" % (self.organization_doc().title, self.copied_from.display_name())
+            return format_html(
+                "Snapshot of {0} &gt; {1}",
+                self.organization_doc().title,
+                self.copied_from.display_name()
+            )
         if self.organization:
-            return '%s &gt; %s' % (self.organization_doc().title, self.slug)
+            return format_html(
+                '{0} &gt; {1}',
+                self.organization_doc().title,
+                self.slug
+            )
         else:
             return self.name
+
+    __str__ = long_display_name
 
     def get_license_display(self):
         return LICENSES.get(self.license)
 
     def copies(self):
-        return Domain.view('domain/copied_from_snapshot', key=self.name, include_docs=True)
+        return Domain.view('domain/copied_from_snapshot', key=self._id, include_docs=True)
 
     def copies_of_parent(self):
-        return Domain.view('domain/copied_from_snapshot', keys=[s.name for s in self.copied_from().snapshots()], include_docs=True)
+        return Domain.view('domain/copied_from_snapshot', keys=[s._id for s in self.copied_from.snapshots()], include_docs=True)
 
     def delete(self):
         # delete all associated objects
@@ -541,16 +605,41 @@ class Domain(Document, HQBillingDomainMixin):
             db.delete_doc(doc['doc'])
         super(Domain, self).delete()
 
-    def all_media(self):
+    def all_media(self, from_apps=None): #todo add documentation or refactor
         from corehq.apps.hqmedia.models import CommCareMultimedia
-        return CommCareMultimedia.view('hqmedia/by_domain', key=self.name, include_docs=True).all()
+        dom_with_media = self if not self.is_snapshot else self.copied_from
+
+        if self.is_snapshot:
+            app_ids = [app.copied_from.get_id for app in self.full_applications()]
+            if from_apps:
+                from_apps = set([a_id for a_id in app_ids if a_id in from_apps])
+            else:
+                from_apps = app_ids
+
+        if from_apps:
+            media = []
+            media_ids = set()
+            apps = [app for app in dom_with_media.full_applications() if app.get_id in from_apps]
+            for app in apps:
+                for _, m in app.get_media_documents():
+                    if m.get_id not in media_ids:
+                        media.append(m)
+                        media_ids.add(m.get_id)
+            return media
+
+        return CommCareMultimedia.view('hqmedia/by_domain', key=dom_with_media.name, include_docs=True).all()
+
+    def most_restrictive_licenses(self, apps_to_check=None):
+        from corehq.apps.hqmedia.utils import most_restrictive
+        licenses = [m.license['type'] for m in self.all_media(from_apps=apps_to_check) if m.license]
+        return most_restrictive(licenses)
 
     @classmethod
-    def popular_sort(cls, domains, page):
+    def popular_sort(cls, domains):
         sorted_list = []
         MIN_REVIEWS = 1.0
 
-        domains = [(domain, Review.get_average_rating_by_app(domain.original_doc), Review.get_num_ratings_by_app(domain.original_doc)) for domain in domains]
+        domains = [(domain, Review.get_average_rating_by_app(domain.copied_from._id), Review.get_num_ratings_by_app(domain.copied_from._id)) for domain in domains]
         domains = [(domain, avg or 0.0, num or 0) for domain, avg, num in domains]
 
         total_average_sum = sum(avg for domain, avg, num in domains)
@@ -568,13 +657,17 @@ class Domain(Document, HQBillingDomainMixin):
 
         sorted_list = [domain for weighted_rating, domain in sorted(sorted_list, key=lambda domain: domain[0], reverse=True)]
 
-        return sorted_list[((page-1)*9):((page)*9)]
+        return sorted_list
 
     @classmethod
-    def hit_sort(cls, domains, page):
+    def hit_sort(cls, domains):
         domains = list(domains)
-        domains = sorted(domains, key=lambda domain: len(domain.copies_of_parent()), reverse=True)
-        return domains[((page-1)*9):((page)*9)]
+        domains = sorted(domains, key=lambda domain: domain.downloads, reverse=True)
+        return domains
+
+    @classmethod
+    def public_deployments(cls):
+        return Domain.view('domain/with_deployment', include_docs=True).all()
 
 
 ##############################################################################################################
@@ -643,4 +736,42 @@ class OldDomain(models.Model):
 
     def __unicode__(self):
         return self.name
+
+class DomainCounter(Document):
+    domain = StringProperty()
+    name = StringProperty()
+    count = IntegerProperty()
+    
+    @classmethod
+    def get_or_create(cls, domain, name):
+        #TODO: Need to make this atomic
+        counter = cls.view("domain/counter",
+            key = [domain, name],
+            include_docs=True
+        ).one()
+        if counter is None:
+            counter = DomainCounter (
+                domain = domain,
+                name = name,
+                count = 0
+            )
+            counter.save()
+        return counter
+    
+    @classmethod
+    def increment(cls, domain, name, amount=1):
+        num_tries = 0
+        while True:
+            try:
+                counter = cls.get_or_create(domain, name)
+                range_start = counter.count + 1
+                counter.count += amount
+                counter.save()
+                range_end = counter.count
+                break
+            except ResourceConflict:
+                num_tries += 1
+                if num_tries >= 500:
+                    raise
+        return (range_start, range_end)
 

@@ -4,7 +4,6 @@ from casexml.apps.case.models import CommCareCase
 from casexml.apps.case.tests.util import check_xml_line_by_line
 from casexml.apps.case.xml import V1
 from corehq.apps.receiverwrapper.models import RepeatRecord, CaseRepeater, FormRepeater
-from corehq.apps.receiverwrapper.tasks import check_inline_form_repeaters
 from couchforms.models import XFormInstance
 from django.core.urlresolvers import reverse
 from django.test import TestCase
@@ -12,6 +11,7 @@ from django.test.client import Client
 
 case_id = "ABC123CASEID"
 instance_id = "XKVB636DFYL38FNX3D38WV5EH"
+update_instance_id = "ZYXKVB636DFYL38FNX3D38WV5"
 
 case_block = """
 <case>
@@ -26,7 +26,18 @@ case_block = """
 </case>
 """ % case_id
 
-xform_xml = """<?xml version='1.0' ?>
+update_block = """
+<case>
+    <case_id>%s</case_id>
+    <date_modified>2011-12-19</date_modified>
+    <update>
+        <case_name>ABC 234</case_name>
+    </update>
+</case>
+""" % case_id
+
+
+xform_xml_template = """<?xml version='1.0' ?>
 <data xmlns:jrm="http://dev.commcarehq.org/jr/xforms" xmlns="https://www.commcarehq.org/test/repeater/">
 	<woman_name>Alpha</woman_name>
 	<husband_name>Beta</husband_name>
@@ -40,7 +51,9 @@ xform_xml = """<?xml version='1.0' ?>
 	</meta>
 %s
 </data>
-""" % (instance_id, case_block)
+"""
+xform_xml = xform_xml_template % (instance_id, case_block)
+update_xform_xml = xform_xml_template % (update_instance_id, update_block)
 
 class RepeaterTest(TestCase):
     def setUp(self):
@@ -50,14 +63,17 @@ class RepeaterTest(TestCase):
         self.case_repeater.save()
         self.form_repeater = FormRepeater(domain=self.domain, url='form-repeater-url')
         self.form_repeater.save()
-        f = StringIO(xform_xml)
-        f.name = 'register.xml'
+        self.log = []
+        self.post_xml(xform_xml)
+
+    def post_xml(self, xml):
+        f = StringIO(xml)
+        f.name = 'form.xml'
         self.client.post(
             reverse('receiver_post', args=[self.domain]), {
                 'xml_submission_file': f
             }
         )
-        self.log = []
 
     def clear_log(self):
         for i in range(len(self.log)): self.log.pop()
@@ -84,10 +100,11 @@ class RepeaterTest(TestCase):
 
         CommCareCase.get(case_id)
 
-        now = datetime.utcnow()
+        def now():
+            return datetime.utcnow()
 
 
-        repeat_records = RepeatRecord.all(domain=self.domain, due_before=now)
+        repeat_records = RepeatRecord.all(domain=self.domain, due_before=now())
         self.assertEqual(len(repeat_records), 2)
 
         self.clear_log()
@@ -102,9 +119,9 @@ class RepeaterTest(TestCase):
 
         self.clear_log()
 
-        in30min = now + timedelta(minutes=30)
+        in30min = now() + timedelta(minutes=30)
 
-        repeat_records = RepeatRecord.all(domain=self.domain, due_before=now + timedelta(minutes=15))
+        repeat_records = RepeatRecord.all(domain=self.domain, due_before=now() + timedelta(minutes=15))
         self.assertEqual(len(repeat_records), 0)
 
         repeat_records = RepeatRecord.all(domain=self.domain, due_before=in30min + timedelta(seconds=1))
@@ -125,35 +142,27 @@ class RepeaterTest(TestCase):
             self.assertEqual(repeat_record.succeeded, True)
             self.assertEqual(repeat_record.next_check, None)
 
-    def test_migration(self):
-        now = datetime.utcnow()
-        repeats = [
-            {
-                "url": "http://example.com/",
-                "doc_type": "RepeatRecord",
-                "next_check": now,
-                "last_checked": None,
-                "succeeded": False
-            }
-        ]
-        xform = XFormInstance.get(instance_id)
-        xform.repeats = repeats
-        xform.save()
 
-        def always_success():
-            while True:
-                yield 200
+        repeat_records = RepeatRecord.all(domain=self.domain, due_before=now())
+        self.assertEqual(len(repeat_records), 0)
 
-        self.clear_log()
+        self.post_xml(update_xform_xml)
 
-        check_inline_form_repeaters(post_fn=self.make_post_fn(always_success()))
+        repeat_records = RepeatRecord.all(domain=self.domain, due_before=now())
+        self.assertEqual(len(repeat_records), 2)
 
-        self.assertEqual(len(self.log), 1)
 
-        self.assertEqual(self.log[0], (repeats[0]['url'], 200, xform_xml))
+class RepeaterLockTest(TestCase):
 
-        self.clear_log()
-
-        check_inline_form_repeaters(post_fn=self.make_post_fn(always_success()))
-
-        self.assertEqual(len(self.log), 0)
+    def testLocks(self):
+        r = RepeatRecord(domain='test')
+        r.save()
+        r2 = RepeatRecord.get(r._id)
+        self.assertTrue(r.acquire_lock(datetime.utcnow()))
+        r3 = RepeatRecord.get(r._id)
+        self.assertFalse(r2.acquire_lock(datetime.utcnow()))
+        self.assertFalse(r3.acquire_lock(datetime.utcnow()))
+        r.release_lock()
+        r4 = RepeatRecord.get(r._id)
+        self.assertTrue(r4.acquire_lock(datetime.utcnow()))
+        

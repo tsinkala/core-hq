@@ -1,25 +1,32 @@
 import xlrd
 from dimagi.utils.couch.database import get_db
 
-def get_case_properties(domain, case_type):
+def get_case_properties(domain, case_type=None):
     """
     For a given case type and domain, get all unique existing case properties,
     known and unknown
     """
+    key = [domain]
+    if case_type:
+        key.append(case_type)
     rows = get_db().view('hqcase/all_case_properties',
-                         startkey=[domain, case_type],
-                         endkey=[domain, case_type, {}], 
+                         startkey=key,
+                         endkey=key + [{}],
                          reduce=True, group=True, group_level=3).all()
     return [r['key'][2] for r in rows]
     
 # class to deal with Excel files
 class ExcelFile(object):
     # xlrd support for .xlsx isn't complete
+    # NOTE: other code makes the assumption that this is the only supported
+    # extension so if you fix this you should also fix these assumptions
+    # (see _get_spreadsheet in views.py)
     ALLOWED_EXTENSIONS = ['xls']
     
     file_path = ''
     workbook = None
     column_headers = False
+    has_errors = False
     
     def __init__(self, file_path, column_headers):
         self.file_path = file_path
@@ -27,8 +34,8 @@ class ExcelFile(object):
         
         try:
             self.workbook = xlrd.open_workbook(self.file_path)
-        except:
-            return None
+        except Exception:
+            self.has_errors = True
                 
     def get_first_sheet(self):
         if self.workbook:

@@ -138,12 +138,38 @@ class FixtureDataItem(Document):
             return fixture_ids
 
     @classmethod
+    def by_group(cls, group, wrap=True):
+        fixture_ids = get_db().view('fixtures/ownership',
+            key=['data_item by group', group.domain, group.get_id],
+            reduce=False,
+            wrapper=lambda r: r['value'],
+        ).all()
+
+        return cls.view('_all_docs', keys=list(fixture_ids), include_docs=True) if wrap else fixture_ids
+
+    @classmethod
     def by_data_type(cls, domain, data_type):
-        if isinstance(data_type, basestring):
-            data_type_id = data_type
-        else:
-            data_type_id = data_type.get_id if data_type else None
+        data_type_id = _id_from_doc(data_type)
         return cls.view('fixtures/data_items_by_domain_type', key=[domain, data_type], reduce=False, include_docs=True)
+
+    @classmethod
+    def by_data_type_and_name(cls, domain, data_type, name):
+        if not name or not data_type:
+            return None
+
+        data_type_id = _id_from_doc(data_type)
+        fixture_data_items = cls.by_data_type(domain, data_type_id).all()
+        for fdi in fixture_data_items:
+            if fdi.fields["name"].lower() == name.lower() or fdi.fields["id"].lower() == name.lower():
+                return fdi
+        return None
+
+def _id_from_doc(doc_or_doc_id):
+    if isinstance(doc_or_doc_id, basestring):
+        doc_id = doc_or_doc_id
+    else:
+        doc_id = doc_or_doc_id.get_id if doc_or_doc_id else None
+    return doc_id
 
 class FixtureOwnership(Document):
     domain = StringProperty()

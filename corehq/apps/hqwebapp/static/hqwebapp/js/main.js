@@ -70,8 +70,9 @@ var SaveButton = {
                     this.ui.append(this.$retry);
                 }
             },
-            ajax: function (options) {
-                var beforeSend = options.beforeSend || function () {},
+            ajaxOptions: function (options) {
+                var options = options || {},
+                    beforeSend = options.beforeSend || function () {},
                     success = options.success || function () {},
                     error = options.error || function () {},
                     that = this;
@@ -90,7 +91,10 @@ var SaveButton = {
                     alert(SaveButton.message.ERROR_SAVING);
                     error.apply(this, arguments);
                 };
-                $.ajax(options);
+                return options;
+            },
+            ajax: function (options) {
+                $.ajax(button.ajaxOptions(options));
             }
         };
         eventize(button);
@@ -100,6 +104,15 @@ var SaveButton = {
         });
         if (options.save) {
             button.on('save', options.save);
+        } else if (options.saveRequest) {
+            button.on('save', function () {
+                var o = button.ajaxOptions();
+                o.beforeSend();
+                options.saveRequest()
+                    .success(o.success)
+                    .error(o.error)
+                ;
+            })
         }
         $(window).bind('beforeunload', function () {
             var stillAttached = button.ui.parents()[button.ui.parents().length - 1].tagName.toLowerCase() == 'html';
@@ -127,7 +140,7 @@ var SaveButton = {
                 button.fire('change');
             };
         $form.find('*').change(fireChange);
-        $form.find('input, textarea').bind('textchange', fireChange);
+        $form.on('textchange', 'input, textarea', fireChange);
         return button;
     },
     message: {
@@ -148,6 +161,20 @@ var COMMCAREHQ = (function () {
             ADD:    'ui-icon ui-icon-plusthick',
             COPY:   'ui-icon ui-icon-copy',
             DELETE: 'ui-icon ui-icon-closethick'
+        },
+        makeHqHelp: function (opts, wrap) {
+            wrap = wrap === undefined ? true : wrap;
+            var el = $(
+                '<a href="#" class="hq-help no-click">' +
+                    '<i class="icon-question-sign" data-trigger="hover"></i></a>'
+            );
+            for (var attr in {'content': 0, 'title': 0}) {
+                $('i', el).data(attr, opts[attr]);
+            }
+            if (wrap) {
+                el.hqHelp();
+            }
+            return el;
         },
         initBlock: function ($elem) {
             $('.submit_on_click', $elem).click(function (e) {

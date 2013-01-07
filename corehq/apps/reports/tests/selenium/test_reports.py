@@ -1,12 +1,14 @@
 from corehq.apps.selenium.testcases import WebUserTestCase
+from corehq.apps import selenium
 from selenium.common.exceptions import NoSuchElementException
-from django.conf import settings
 import re
 
 
 class ReportsTestCase(WebUserTestCase):
-
-    max_load_time = settings.TEST_REPORT_MAX_LOAD_TIME
+    
+    app = selenium.get_app('reports')
+    max_preload_time = app.MAX_PRELOAD_TIME
+    max_load_time = app.MAX_LOAD_TIME
 
     @classmethod
     def setUpClass(cls):
@@ -34,15 +36,14 @@ class ReportsTestCase(WebUserTestCase):
         def test(self):
             self.find_element_by_link_text(report_name).click()
 
-            try:
-                self.find_element_by_link_text("Hide Filter Options",
-                                               duration=2)
-            except NoSuchElementException:
-                self.find_element_by_link_text("Show Filter Options").click()
+            elem = self.find_element_by_xpath(
+                "//*[text()='Hide Filter Options'] | //*[text()='Show Filter Options']",
+                duration=self.max_preload_time
+            )
+            if elem.text == 'Show Filter Options':
+                elem.click()
 
-            self.find_element_by_xpath(
-                "//div[@class='form-actions']/button"
-            ).click()
+            self.find_element_by_xpath("//button[@id='apply-filters']").click()
 
             self.wait_until_not(loading_report, time=self.max_load_time)
 
@@ -51,12 +52,10 @@ class ReportsTestCase(WebUserTestCase):
 report_names = (
     'Case Activity',
     'Submissions By Form',
-    'Daily Form Submissions',
-    'Daily Form Completions',
-    'Form Completion Trends',
+    'Daily Form Activity',
+    'Form Completion Time',
     'Form Completion vs. Submission Trends',
-    'Submission Times',
-    'Submit Distribution',
+    'Worker Activity Times',
 
     'Submit History',
     'Case List',

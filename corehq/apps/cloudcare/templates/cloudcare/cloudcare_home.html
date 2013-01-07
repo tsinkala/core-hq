@@ -1,4 +1,4 @@
-{% extends "hqwebapp/two_column.html" %}
+{% extends "cloudcare/base.html" %}
 {% load i18n %}
 {% load hq_shared_tags %}
 
@@ -35,33 +35,29 @@
 
 {% endblock %}
 
-{% block page-title %}
-    <ul class="breadcrumb">
-        <li>
-            <a href="{% url cloudcare_default domain %}"><strong>CloudCare</strong></a><sup>beta</sup>
-        </li>
-    </ul>
-{% endblock %}
-
 {% block js-inline %} {{ block.super }}
 <script>
 
     GMAPS_API_KEY = '{{ maps_api_key|safe }}'; // maps api is loaded on-demand
 
     $(function () {
-        var urlRoot = "{% url cloudcare_app_list domain '' %}";
+        var urlRoot = "{% url cloudcare_main domain '' %}";
         var appUrlRoot = "{% url cloudcare_get_apps domain %}";
         var caseUrlRoot = "{% url cloudcare_get_cases domain %}";
         var submitUrlRoot = "{% url receiver_post domain %}";
         var language = "{{ language }}";
         var apps = {{ apps|safe }};
+        var initialApp = {{ app|JSON }};
+        var initialCase = {{ case|JSON }};
         window.mainView = new cloudCare.AppMainView({
 			apps: apps,
 			language: language,
 			urlRoot: urlRoot,
 			appUrlRoot: appUrlRoot,
 			caseUrlRoot: caseUrlRoot,
-			submitUrlRoot: submitUrlRoot
+			submitUrlRoot: submitUrlRoot,
+			initialApp: initialApp,
+			initialCase: initialCase
         });
         // TODO: when we figure out what to do about get params, use this
         Backbone.history.start({pushState: true, root: urlRoot});

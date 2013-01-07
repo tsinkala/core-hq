@@ -1,5 +1,4 @@
 from django.conf.urls.defaults import *
-from django.conf import settings
 
 urlpatterns = patterns('corehq.apps.hqwebapp.views',
     url(r'^homepage/$', 'redirect_to_default', name='homepage'),
@@ -8,7 +7,7 @@ urlpatterns = patterns('corehq.apps.hqwebapp.views',
     (r'^serverup.txt$', 'server_up'),
     (r'^change_password/$', 'password_change'),
     
-    (r'^no_permissions/$', 'no_permissions'),
+    url(r'^no_permissions/$', 'no_permissions', name='no_permissions'),
     
     url(r'^accounts/login/$', 'login', name="login"),
     url(r'^accounts/logout/$', 'logout', name="logout"),
@@ -19,5 +18,11 @@ urlpatterns = patterns('corehq.apps.hqwebapp.views',
 )
 
 domain_specific = patterns('corehq.apps.hqwebapp.views',
- url(r'^$', 'redirect_to_default', name='domain_homepage'),
+    url(r'^$', 'redirect_to_default', name='domain_homepage'),
+    url(r'^login/$', 'domain_login', name='domain_login'),
+    url(r'^login/mobile/$', 'domain_login', name='domain_mobile_login', 
+        kwargs={'template_name': 'login_and_password/mobile_login.html'}),
+    url(r'^retreive_download/(?P<download_id>[0-9a-fA-Z]{25,32})/$', 
+        'retrieve_download', {'template': 'hqwebapp/file_download.html' },
+        name='hq_soil_download')
 )

@@ -42,8 +42,6 @@ def auth_pages_path(page):
 
 urlpatterns =\
     patterns('corehq.apps.domain.views',
-        (r'^user_registration/', include('corehq.apps.registration.user_registration_backend.urls')),
-        url(r'^domain/tos/$', direct_to_template, {'template': 'tos.html'}, name='tos'),
         url(r'^domain/select/$', 'select', name='domain_select'),
         url(r'^domain/autocomplete/(?P<field>\w+)/$', 'autocomplete_fields', name='domain_autocomplete_fields'),
     ) +\
@@ -58,10 +56,6 @@ urlpatterns =\
         url(r'^accounts/password_reset_confirm/done/$', 'password_reset_complete', auth_pages_path('password_reset_complete.html') ) 
     )
 
-
-domain_specific = patterns('corehq.apps.domain.views',
-                           url(r'^info/$', 'snapshot_info', name='domain_snapshot_info'),
-)
 
 domain_settings = patterns('corehq.apps.domain.views',
                            url(r'^$', 'project_settings', name="domain_project_settings"),

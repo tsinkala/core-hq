@@ -79,7 +79,7 @@ ko.bindingHandlers.editableString = generateEditableHandler({
         if (element) {
             return $('input', element);
         } else {
-            return $('<input/>');
+            return $('<input type="text"/>');
         }
     },
     getNonEdit: function (element) {
@@ -217,8 +217,24 @@ ko.bindingHandlers.openModal = {
                 };
                 return clickAction;
             };
-        console.log(modal);
         ko.bindingHandlers.click.init(element, newValueAccessor, allBindingsAccessor, viewModel, bindingContext);
+    }
+};
+
+ko.bindingHandlers.openJqm = {
+    init: function (element, valueAccessor, allBindingsAccessor, viewModel, bindingContext) {
+        var ajaxSrc = valueAccessor(),
+            modal = $('<div></div>').addClass('jqmWindow').appendTo('body'),
+            newValueAccessor = function () {
+                var clickAction = function () {
+                    modal.jqm({ajax: ajaxSrc}).jqmShow();
+                };
+                return clickAction;
+
+            };
+        ko.bindingHandlers.click.init(element, newValueAccessor, allBindingsAccessor, viewModel, bindingContext);
+//            $('#odk-install-placeholder').jqm({ajax: '@href', trigger: 'a.odk_install',
+//            ajaxText: "Please wait while we load that for you..." });
     }
 };
 
@@ -230,5 +246,139 @@ ko.bindingHandlers.visibleFade = {
         } else if (!value) {
             $(element).slideUp();
         }
+    }
+};
+
+ko.bindingHandlers.starred = {
+    init: function (element) {
+        $(element).addClass('star');
+    },
+    update: function (element, valueAccessor) {
+        var value = ko.utils.unwrapObservable(valueAccessor()),
+            $element = $(element);
+        $element.addClass('star');
+
+        $element.removeClass('star-false');
+        $element.removeClass('star-true');
+        $element.removeClass('star-pending');
+        $element.removeClass('star-error');
+        $element.addClass('star-' + value);
+    }
+};
+
+ko.bindingHandlers.bootstrapCollapse = {
+    init: function (element) {
+        $(element).on('click', 'a.accordion-toggle', function () {
+            var $a = $(this);
+            if (!$a.attr('href')) {
+                $a.parent().parent().find('.collapse').collapse('toggle');
+            }
+        });
+    }
+};
+
+ko.bindingHandlers.bootstrapTabs = {
+    init: function (element) {
+        var tabLinkSelector = 'ul.nav > li > a';
+        var activate = function () {
+            var n = $(tabLinkSelector, element).index(this);
+            $(tabLinkSelector, element).parents().removeClass('active');
+            $(this).parent().addClass('active');
+            $('.tab-pane', element).removeClass('active');
+            $('.tab-pane:eq(' + n + ')', element).addClass('active');
+        };
+        $(element).on('click', tabLinkSelector, activate);
+        // Wait for the rest of the element to be rendered before init'ing
+        // (bit of a race condition)
+        setTimeout(function () {
+            $('ul.nav > li.active > a', element).each(activate);
+        }, 0);
+    }
+};
+
+function ValueOrNoneUI(opts) {
+    /* Helper used with exitInput/enterInput */
+    var self = this;
+    function wrapObservable(o) {
+        if (ko.isObservable(o)) {
+            return o;
+        } else {
+            return ko.observable(o);
+        }
+    }
+    self.allowed = wrapObservable(opts.allowed);
+    self.inputValue = wrapObservable(opts.value || '');
+    self.hasValue = ko.observable(!!self.inputValue());
+    self.hasFocus = ko.observable();
+    self.messages = opts.messages;
+
+    self.inputName = opts.inputName;
+    self.inputCss = opts.inputCss;
+    self.inputAttr = opts.inputAttr;
+
+    self.value = ko.computed({
+        read: function () {
+            if (self.hasValue()) {
+                return self.inputValue() || '';
+            } else {
+                return '';
+            }
+        },
+        write: function (value) {
+            self.inputValue(value)
+        }
+    });
+    self.setHasValue = function (hasValue, event) {
+        var before = self.value(),
+            after;
+        self.hasValue(hasValue);
+        after = self.value();
+        if (before !== after) {
+            $(event.toElement).change();
+        }
+    };
+    self.enterInput = function (data, event) {
+        self.setHasValue(true, event);
+        if (self.allowed()) {
+            self.hasFocus(true);
+        }
+    };
+    self.exitInput = function (data, event) {
+        self.setHasValue(false, event);
+        self.value('');
+    };
+}
+
+function _makeClickHelper(fnName, icon) {
+    return {
+        init: function(element, valueAccessor, allBindingsAccessor, viewModel, bindingContext) {
+            var $el = $(element);
+            $('<i></i>').addClass(icon).prependTo($el);
+            return ko.bindingHandlers.click.init(element, function () {
+                return valueAccessor()[fnName];
+            }, allBindingsAccessor, viewModel, bindingContext);
+        }
+    };
+}
+
+ko.bindingHandlers.exitInput = _makeClickHelper('exitInput', 'icon icon-remove');
+ko.bindingHandlers.enterInput = _makeClickHelper('enterInput', 'icon icon-plus');
+
+ko.bindingHandlers.valueOrNoneUI = {
+    init: function(element, valueAccessor, allBindingsAccessor, viewModel, bindingContext) {
+        var opts = valueAccessor(),
+            helper;
+        opts.messages = opts.messages || {};
+        $('span', element).each(function () {
+            opts.messages[$(this).data('slug')] = $(this).html();
+            $(this).hide();
+        });
+        helper = new ValueOrNoneUI(opts);
+        var subElement = $('<div></div>').attr(
+            'data-bind',
+            "template: 'value-or-none-ui-template'"
+        ).appendTo(element);
+        ko.applyBindings(helper, subElement.get(0));
+        return {controlsDescendantBindings: true};
     }
 };
