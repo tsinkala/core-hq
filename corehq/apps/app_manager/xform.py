@@ -722,7 +722,7 @@ class XForm(WrappedNode):
                     }.get(property, property)
                     self.add_setvalue(
                         ref=nodeset,
-                        value=this_case_id.case().property(property),
+                        value=this_case_id.case().property(property_xpath),
                     )
             if needs_casedb_instance:
                 self.add_instance('casedb', src='jr://instance/casedb')
