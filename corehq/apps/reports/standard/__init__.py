@@ -1,6 +1,5 @@
 import dateutil
 from django.core.urlresolvers import reverse
-from django.utils.safestring import mark_safe
 from corehq.apps.groups.models import Group
 from corehq.apps.reports import util
 from corehq.apps.adm import utils as adm_utils
@@ -55,11 +54,11 @@ class CommCareUserMemoizer(object):
 
 class ProjectReportParametersMixin(object):
     """
-        All the paramaters necessary for the project reports.
+        All the parameters necessary for the project reports.
         Intended to be mixed in with a GenericReportView object.
     """
-    def __getattr__(self, item):
-        return super(ProjectReportParametersMixin, self).__getattribute__(item)
+
+    filter_group_name = None
 
     @property
     @memoized
@@ -68,6 +67,7 @@ class ProjectReportParametersMixin(object):
 
     @memoized
     def get_all_users_by_domain(self, group=None, individual=None, user_filter=None, simplified=False):
+
         return list(util.get_all_users_by_domain(
             domain=self.domain,
             group=group,
@@ -83,13 +83,16 @@ class ProjectReportParametersMixin(object):
         return FilterUsersField.get_user_filter(self.request)[0]
 
     @property
-    def group_name(self):
+    def group_id(self):
         return self.request_params.get('group', '')
 
     @property
     @memoized
     def group(self):
-        return Group.by_name(self.domain, self.group_name)
+        if self.group_id:
+            return Group.get(self.group_id)
+        else:
+            return None
 
     @property
     def individual(self):
@@ -102,8 +105,13 @@ class ProjectReportParametersMixin(object):
     @property
     @memoized
     def users(self):
+        if self.filter_group_name and not (self.group_id or self.individual):
+            group = Group.by_name(self.domain, self.filter_group_name)
+        else:
+            group = self.group
+
         return self.get_all_users_by_domain(
-            group=self.group_name,
+            group=group,
             individual=self.individual,
             user_filter=tuple(self.user_filter),
             simplified=True
@@ -162,9 +170,6 @@ class DatespanMixin(object):
     """
     datespan_field = 'corehq.apps.reports.fields.DatespanField'
     datespan_default_days = 7
-
-    def __getattr__(self, item):
-        return super(DatespanMixin, self).__getattribute__(item)
 
     _datespan = None
     @property

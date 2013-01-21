@@ -8,6 +8,7 @@ from corehq.apps.users.decorators import require_permission
 from corehq.apps.users.models import CommCareUser, Permissions
 from corehq.apps.users.util import normalize_username
 from dimagi.utils.excel import WorkbookJSONReader
+from dimagi.utils.logging import notify_exception
 from dimagi.utils.web import json_response, render_to_response
 from dimagi.utils.decorators.view import get_file
 from django.contrib import messages
@@ -61,9 +62,7 @@ def data_types(request, domain, data_type_id):
             return json_response(strip_json(data_type))
 
         elif request.method == 'DELETE':
-            for item in FixtureDataItem.by_data_type(domain, data_type.get_id):
-                item.delete()
-            data_type.delete()
+            data_type.recursive_delete()
             return json_response({})
 
     elif data_type_id is None:
@@ -75,6 +74,11 @@ def data_types(request, domain, data_type_id):
 
         elif request.method == 'GET':
             return json_response([strip_json(x) for x in FixtureDataType.by_domain(domain)])
+
+        elif request.method == 'DELETE':
+            for data_type in FixtureDataType.by_domain(domain):
+                data_type.recursive_delete()
+            return json_response({})
 
     return HttpResponseBadRequest()
 
@@ -118,7 +122,7 @@ def data_items(request, domain, data_type_id, data_item_id):
     elif request.method == 'DELETE' and data_item_id:
         o = FixtureDataItem.get(data_item_id)
         assert(o.domain == domain and o.data_type.get_id == data_type_id)
-        o.delete()
+        o.delete_recursive()
         return json_response({})
     else:
         return HttpResponseBadRequest()
@@ -205,36 +209,39 @@ class UploadItemLists(TemplateView):
             data_types = workbook.get_worksheet(title='types')
         except KeyError:
             return HttpResponseBadRequest("Workbook does not have a sheet called 'types'")
-
-        for dt in data_types:
-            data_type = FixtureDataType(
-                domain=self.domain,
-                name=dt['name'],
-                tag=dt['tag'],
-                fields=dt['field'],
-            )
-            data_type.save()
-            data_items = workbook.get_worksheet(data_type.tag)
-            for di in data_items:
-                data_item = FixtureDataItem(
+        try:
+            for dt in data_types:
+                data_type = FixtureDataType(
                     domain=self.domain,
-                    data_type_id=data_type.get_id,
-                    fields=di['field']
+                    name=dt['name'],
+                    tag=dt['tag'],
+                    fields=dt['field'],
                 )
-                data_item.save()
-                for group_name in di.get('group', []):
-                    group = Group.by_name(self.domain, group_name)
-                    if group:
-                        data_item.add_group(group)
-                    else:
-                        messages.error(request, "Unknown group: %s" % group_name)
-                for raw_username in di.get('user', []):
-                    username = normalize_username(raw_username, self.domain)
-                    user = CommCareUser.get_by_username(username)
-                    if user:
-                        data_item.add_user(user)
-                    else:
-                        messages.error(request, "Unknown user: %s" % raw_username)
+                data_type.save()
+                data_items = workbook.get_worksheet(data_type.tag)
+                for di in data_items:
+                    data_item = FixtureDataItem(
+                        domain=self.domain,
+                        data_type_id=data_type.get_id,
+                        fields=di['field']
+                    )
+                    data_item.save()
+                    for group_name in di.get('group', []):
+                        group = Group.by_name(self.domain, group_name)
+                        if group:
+                            data_item.add_group(group)
+                        else:
+                            messages.error(request, "Unknown group: %s" % group_name)
+                    for raw_username in di.get('user', []):
+                        username = normalize_username(raw_username, self.domain)
+                        user = CommCareUser.get_by_username(username)
+                        if user:
+                            data_item.add_user(user)
+                        else:
+                            messages.error(request, "Unknown user: %s" % raw_username)
+        except Exception as e:
+            notify_exception(request)
+            messages.error(request, "Fixture upload could not complete due to the following error: %s" % e)
 
         return HttpResponseRedirect(reverse('fixture_view', args=[self.domain]))
 

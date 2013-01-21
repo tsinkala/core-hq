@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AdminPasswordChangeForm
 from django.contrib.auth.models import User
-from django.contrib.auth.views import login as django_login
+from django.contrib.auth.views import login as django_login, redirect_to_login
 from django.contrib.auth.views import logout as django_logout
 from django.contrib.sites.models import Site
 from django.http import HttpResponseRedirect, HttpResponse, Http404,\
@@ -161,8 +161,13 @@ def server_up(req):
         return HttpResponse('\n'.join(message), status=500)
 
 
-def no_permissions(request):
-    return redirect('registration_domain')
+def no_permissions(request, template_name="no_permission.html"):
+    next = request.GET.get('next', None)
+    if request.GET.get('switch', None) == 'true':
+        logout(request)
+        return redirect_to_login(next or request.path)
+
+    return render_to_response(request, template_name, {'next': next})
 
 def _login(req, domain, template_name):
     if req.user.is_authenticated() and req.method != "POST":
@@ -225,6 +230,7 @@ def bug_report(req):
         'app_id',
         )])
 
+    report['user_agent'] = req.META['HTTP_USER_AGENT']
     report['datetime'] = datetime.utcnow()
 
     report['time_description'] = u'just now' if report['now'] else u'earlier: {when}'.format(**report)
@@ -242,6 +248,7 @@ def bug_report(req):
         u"copy url: {copy_url}\n"
         u"datetime: {datetime}\n"
         u"error occured: {time_description}\n"
+        u"User Agent: {user_agent}\n"
         u"Message:\n\n"
         u"{message}\n"
         ).format(**report)

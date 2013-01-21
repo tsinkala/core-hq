@@ -1,4 +1,3 @@
-import re
 from casexml.apps.case.xml import V2_NAMESPACE
 from corehq.apps.app_manager.const import APP_V1, APP_V2
 from lxml import etree as ET
@@ -13,7 +12,7 @@ def parse_xml(string):
     try:
         return ET.fromstring(string, parser=ET.XMLParser(encoding="utf-8", remove_comments=True))
     except ET.ParseError, e:
-        raise XFormError("Problem parsing an XForm. The parsing error is: %s" % (e if e.message else "unknown"))
+        raise XFormError("Problem parsing an XForm." + ("The parsing error is: %s" % e if e.message else ""))
 
 class XFormError(Exception):
     pass
@@ -39,6 +38,32 @@ namespaces = dict(
 def _make_elem(tag, attr=None):
     attr = attr or {}
     return ET.Element(tag.format(**namespaces), dict([(key.format(**namespaces), val) for key,val in attr.items()]))
+
+class XPath(unicode):
+    def slash(self, xpath):
+        if self:
+            return XPath(u'%s/%s' % (self, xpath))
+        else:
+            return XPath(xpath)
+
+class CaseIDXPath(XPath):
+
+    def case(self):
+        return CaseXPath(u"instance('casedb')/casedb/case[@case_id=%s]" % self)
+
+class CaseXPath(XPath):
+
+    def index_id(self, name):
+        return CaseIDXPath(self.slash(u'index').slash(name))
+
+    def parent_id(self):
+        return self.index_id('parent')
+
+    def property(self, property):
+        return self.slash(property)
+
+SESSION_CASE_ID = CaseIDXPath(u"instance('commcaresession')/session/data/case_id")
+
 
 class WrappedNode(object):
     def __init__(self, xml, namespaces=namespaces):
@@ -683,7 +708,7 @@ class XForm(WrappedNode):
             else:
                 self.add_bind(
                     nodeset="case/@case_id",
-                    calculate="instance('commcaresession')/session/data/case_id",
+                    calculate=SESSION_CASE_ID,
                 )
 
             if 'update_case' in actions or extra_updates:
@@ -701,7 +726,7 @@ class XForm(WrappedNode):
                     }.get(property, property)
                     self.add_setvalue(
                         ref=nodeset,
-                        value="instance('casedb')/casedb/case[@case_id=instance('commcaresession')/session/data/case_id]/%s" % property_xpath,
+                        value=SESSION_CASE_ID.case().property(property_xpath),
                     )
             if needs_casedb_instance:
                 self.add_instance('casedb', src='jr://instance/casedb')

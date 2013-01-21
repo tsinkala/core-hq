@@ -33,7 +33,7 @@ class ProjectInspectionReportParamsMixin(object):
         # todo: group this kind of stuff with the field object in a comprehensive field refactor
 
         return [dict(name='individual', value=self.individual),
-                dict(name='group', value=self.group_name),
+                dict(name='group', value=self.group_id),
                 dict(name='case_type', value=self.case_type),
                 dict(name='ufilter', value=[f.type for f in self.user_filter if f.show])]
 
@@ -144,7 +144,9 @@ class CaseDisplay(object):
 
     @property
     def owner_display(self):
-        username = self.report.usernames.get(self.user_id, self.user_not_found_display(self.user_id))
+        username = (self.report.usernames.get(self.user_id) or
+                    self.user_not_found_display(self.user_id))
+
         if self.owning_group and self.owning_group.name:
             return '<span class="label label-inverse">%s</span>' % self.owning_group.name
         else:
@@ -239,10 +241,7 @@ class CaseListMixin(ProjectInspectionReportParamsMixin, GenericTabularReport, Pr
         'corehq.apps.reports.fields.CaseTypeField',
         'corehq.apps.reports.fields.SelectOpenCloseField',
     ]
-
-    def CaseDisplay(self, case):
-        return CaseDisplay(self, case)
-
+    
     @property
     @memoized
     def case_results(self):
@@ -370,7 +369,7 @@ class CaseListReport(CaseListMixin, ProjectInspectionReport):
         rows = []
         def _format_row(row):
             case = self.get_case(row)
-            display = self.CaseDisplay(case)
+            display = CaseDisplay(self, case)
 
             return [
                 display.case_type,
