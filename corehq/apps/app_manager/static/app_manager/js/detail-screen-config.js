@@ -479,8 +479,8 @@ var DetailScreenConfig = (function () {
                         parts[j] = '<span class="label label-info">' +
                             parts[j] + '</span>'
                     }
-                    parts[j] = '<code style="display: inline-block;">' + parts[j] + '</code>'
-                    column.field.ui.html(parts.join('<span style="color: #DDD;">/</span>'));
+                    parts[j] = '<span class="code" style="display: inline-block;">' + parts[j] + '</span>'
+                    column.field.ui.html(parts.join('<span class="muted">/</span>'));
                 }
                 $('<td/>').addClass('detail-screen-field').append(column.field.ui).appendTo($tr);
                 $('<td/>').addClass('detail-screen-header').append(column.header.ui).appendTo($tr);
