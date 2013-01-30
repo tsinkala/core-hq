@@ -13,8 +13,6 @@ class Organization(Document):
     location = StringProperty()
     logo_filename = StringProperty()
 
-    members = StringListProperty()
-
     @classmethod
     def get_by_name(cls, name):
         result = cls.view("orgs/by_name",
@@ -44,10 +42,12 @@ class Organization(Document):
     def __str__(self):
         return self.title
 
-    def add_member(self, guid):
-        if guid not in self.members:
-            self.members.append(guid)
-            self.save()
+    def all_members(self):
+        from corehq.apps.users.models import WebUser
+        return WebUser.by_org(self.name).all()
+
+    def add_member(self, user):
+        user.add_org_membership
         return self.members
 
 class Team(UndoableDocument, MultiMembershipMixin):

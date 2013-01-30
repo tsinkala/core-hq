@@ -48,7 +48,7 @@ class InviteMemberForm(forms.Form):
         existing_member = CouchUser.get_by_username(data)
         if existing_member:
             org = Organization.get_by_name(self.org_name)
-            for id in org.members:
+            for id in org.all_members():
                 if id == existing_member.get_id:
                     raise forms.ValidationError('User is already part of this organization!')
 

@@ -42,7 +42,7 @@ def orgs_landing(request, org, template="orgs/orgs_landing.html", form=None, add
 
     current_teams = Team.get_by_org(org)
     current_domains = Domain.get_by_organization(org)
-    members = [WebUser.get_by_user_id(user_id) for user_id in organization.members]
+    members = organization.all_members()
     vals = dict(org=organization, domains=current_domains, reg_form=reg_form, add_form=add_form,
                 reg_form_empty=reg_form_empty, add_form_empty=add_form_empty, update_form=update_form,
                 update_form_empty=update_form_empty, invite_member_form=invite_member_form,
@@ -148,8 +148,7 @@ class OrgInvitationView(InvitationView):
         return reverse("orgs_landing", args=[self.organization,])
 
     def invite(self, invitation, user):
-        org = Organization.get_by_name(self.organization)
-        org.add_member(user.get_id)
+        user.add_org_membership(self.organization)
 
 @transaction.commit_on_success
 def accept_invitation(request, org, invitation_id):

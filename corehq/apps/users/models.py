@@ -898,6 +898,13 @@ class WebUser(CouchUser, MultiMembershipMixin, OrgMembershipMixin):
         return self.is_superuser
 
     @classmethod
+    def by_org(cls, org):
+        return cls.view("users/by_org",
+            startkey=[org],
+            endkey=[org, {}],
+        )
+
+    @classmethod
     def create(cls, domain, username, password, email=None, uuid='', date='', **kwargs):
         web_user = super(WebUser, cls).create(domain, username, password, email, uuid, date, **kwargs)
         if domain:

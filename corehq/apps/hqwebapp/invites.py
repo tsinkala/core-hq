@@ -61,7 +61,7 @@ class DomainInvitation(Invitation):
 
 
 class OrgInvitation(Invitation):
-    doc_type = "Invitation"
+    doc_type = "OrgInvitation"
     organization = StringProperty()
 
     def send_activation_email(self):
