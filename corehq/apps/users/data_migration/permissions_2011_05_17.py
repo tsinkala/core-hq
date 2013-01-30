@@ -1,4 +1,5 @@
-from corehq.apps.users.models import CouchUser, OldPermissions
+from corehq.apps.hqwebapp.membership import OldPermissions
+from corehq.apps.users.models import CouchUser
 
 def run():
     users = CouchUser.view('users/all_users', include_docs=True)

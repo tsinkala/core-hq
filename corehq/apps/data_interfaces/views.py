@@ -1,5 +1,5 @@
 from corehq.apps.users.decorators import require_permission
-from corehq.apps.users.models import Permissions
+from corehq.apps.hqwebapp.membership import Permissions
 from django.core.urlresolvers import reverse
 from django.http import HttpResponseRedirect
 

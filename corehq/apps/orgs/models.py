@@ -1,10 +1,6 @@
 from couchdbkit.ext.django.schema import *
-from django.contrib.sites.models import Site
-from django.core.urlresolvers import reverse
-from django.template.loader import render_to_string
-from corehq.apps.users.models import WebUser, MultiMembershipMixin, Invitation
-from dimagi.utils.couch.undo import UndoableDocument, DeleteDocRecord
-from dimagi.utils.django.email import send_HTML_email
+from corehq.apps.hqwebapp.membership import MultiMembershipMixin
+from dimagi.utils.couch.undo import  DeleteDocRecord, UndoableDocument
 
 
 class Organization(Document):
@@ -16,7 +12,6 @@ class Organization(Document):
     url = StringProperty()
     location = StringProperty()
     logo_filename = StringProperty()
-
 
     members = StringListProperty()
 
@@ -55,19 +50,10 @@ class Organization(Document):
             self.save()
         return self.members
 
-
 class Team(UndoableDocument, MultiMembershipMixin):
     name = StringProperty()
     organization = StringProperty()
     member_ids = StringListProperty()
-
-#    def add_member(self, guid):
-#    #consistency check to make sure member is not already on the team
-#        if guid in self.members:
-#            return False
-#        self.members.append(guid)
-#        self.save()
-#        return self.members
 
     def add_member(self, couch_user_id):
         from corehq.apps.users.models import WebUser
@@ -96,6 +82,7 @@ class Team(UndoableDocument, MultiMembershipMixin):
         return [user.user_id for user in self.get_members(is_active)]
 
     def get_members(self, is_active=True):
+        from corehq.apps.users.models import WebUser
         users = [WebUser.get_by_user_id(user_id) for user_id in self.member_ids]
         users = [user for user in users if not user.is_deleted()]
         if is_active is True:
@@ -137,15 +124,4 @@ class DeleteTeamRecord(DeleteDocRecord):
     def get_doc(self):
         return Team.get(self.doc_id)
 
-class OrgInvitation(Invitation):
-    doc_type = "Invitation"
-    organization = StringProperty()
 
-    def send_activation_email(self):
-        url = "http://%s%s" % (Site.objects.get_current().domain,
-                               reverse("orgs_accept_invitation", args=[self.organization, self.get_id]))
-        params = {"organization": self.organization, "url": url, "inviter": self.get_inviter().formatted_name}
-        text_content = render_to_string("orgs/email/org_invite.txt", params)
-        html_content = render_to_string("orgs/email/org_invite.html", params)
-        subject = 'Invitation from %s to join CommCareHQ' % self.get_inviter().formatted_name
-        send_HTML_email(subject, self.email, html_content, text_content=text_content)

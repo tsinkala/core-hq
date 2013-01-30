@@ -1,5 +1,4 @@
 from django import forms
-from django.contrib.auth.forms import SetPasswordForm
 from django.core.validators import EmailValidator, email_re
 from django.forms.widgets import PasswordInput, HiddenInput
 from django.utils.encoding import smart_str
@@ -7,10 +6,9 @@ from django.utils.translation import ugettext_lazy as _
 from hqstyle.forms.widgets import BootstrapCheckboxInput, BootstrapDisabledInput
 from dimagi.utils.timezones.fields import TimeZoneField
 from dimagi.utils.timezones.forms import TimeZoneChoiceField
-from corehq.apps.users.models import CouchUser, WebUser, OldRoles, DomainMembership
+from corehq.apps.users.models import CouchUser
 from corehq.apps.users.util import format_username
 from corehq.apps.app_manager.models import validate_lang
-import re
 
 def wrapped_language_validation(value):
     try:

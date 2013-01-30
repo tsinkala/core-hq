@@ -31,7 +31,8 @@ class DomainMigrations(DocumentSchema):
     def apply(self, domain):
         if not self.has_migrated_permissions:
             logging.info("Applying permissions migration to domain %s" % domain.name)
-            from corehq.apps.users.models import UserRole, WebUser
+            from corehq.apps.users.models import  WebUser
+            from corehq.apps.hqwebapp.membership import UserRole
             UserRole.init_domain_with_presets(domain.name)
             for web_user in WebUser.by_domain(domain.name):
                 try:
@@ -801,4 +802,3 @@ class DomainCounter(Document):
                 if num_tries >= 500:
                     raise
         return (range_start, range_end)
-

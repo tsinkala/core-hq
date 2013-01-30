@@ -5,9 +5,10 @@ from couchdbkit.exceptions import ResourceNotFound
 
 from django.contrib import messages
 from django.core.urlresolvers import reverse
-from django.http import HttpResponseRedirect, HttpResponse
+from django.http import HttpResponseRedirect
 from django.views.decorators.http import require_POST, require_GET
 from corehq.apps.reports.util import make_form_couch_key
+from corehq.apps.hqwebapp.membership import Permissions
 
 from dimagi.utils.couch.undo import DELETED_SUFFIX
 from dimagi.utils.decorators.memoized import memoized
@@ -20,7 +21,7 @@ from casexml.apps.case.models import CommCareCase
 from corehq.apps.domain.decorators import require_superuser
 from corehq.apps.groups.models import Group
 from corehq.apps.users.decorators import require_permission
-from corehq.apps.users.models import CommCareUser, Permissions
+from corehq.apps.users.models import CommCareUser
 from corehq.apps.receiverwrapper.util import get_submit_url
 
 from couchforms.models import XFormInstance

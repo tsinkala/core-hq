@@ -5,12 +5,13 @@ from django.db import transaction
 from django.http import HttpResponse, HttpResponseRedirect, Http404, HttpResponseForbidden
 from django.views.decorators.http import require_POST
 from corehq.apps.domain.decorators import require_superuser
-from corehq.apps.hqwebapp.utils import InvitationView
+from corehq.apps.hqwebapp.invites import OrgInvitation, InvitationView
 from corehq.apps.registration.forms import DomainRegistrationForm
 from corehq.apps.orgs.forms import AddProjectForm, InviteMemberForm, AddTeamForm, UpdateOrgInfo
-from corehq.apps.users.models import WebUser, UserRole
+from corehq.apps.hqwebapp.membership import UserRole
+from corehq.apps.users.models import WebUser
 from dimagi.utils.web import render_to_response, json_response
-from corehq.apps.orgs.models import Organization, Team, DeleteTeamRecord, OrgInvitation
+from corehq.apps.orgs.models import Organization, Team, DeleteTeamRecord
 from corehq.apps.domain.models import Domain
 from django.contrib import messages
 

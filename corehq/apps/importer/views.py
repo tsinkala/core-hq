@@ -1,5 +1,6 @@
 import os.path
 from django.http import HttpResponseRedirect
+from corehq.apps.hqwebapp.membership import Permissions
 from dimagi.utils.web import render_to_response
 from casexml.apps.case.models import CommCareCase, const
 from casexml.apps.phone.xml import get_case_xml
@@ -7,12 +8,10 @@ from corehq.apps.hqcase.utils import submit_case_blocks
 from corehq.apps.importer import base
 from corehq.apps.importer.util import ExcelFile, get_case_properties
 from couchdbkit.exceptions import MultipleResultsFound, NoResultFound
-from tempfile import mkstemp
 from django.views.decorators.http import require_POST
 from datetime import datetime, date
 from xlrd import xldate_as_tuple
 from corehq.apps.users.decorators import require_permission
-from corehq.apps.users.models import Permissions
 from soil.util import expose_download
 from soil import DownloadBase
 from django.contrib import messages

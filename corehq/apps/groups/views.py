@@ -1,5 +1,5 @@
 import json
-from corehq.apps.users.models import Permissions
+from corehq.apps.hqwebapp.membership import Permissions
 from django.contrib import messages
 from django.core.urlresolvers import reverse
 from django.http import HttpResponseRedirect, HttpResponseForbidden

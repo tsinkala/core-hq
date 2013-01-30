@@ -9,6 +9,7 @@ import hashlib
 from corehq.apps.app_manager.const import APP_V1
 from corehq.apps.app_manager.success_message import SuccessMessage
 from corehq.apps.domain.models import Domain
+from corehq.apps.hqwebapp.membership import Permissions
 from couchexport.export import FormattedRow
 from couchexport.models import Format
 from couchexport.writers import Excel2007ExportWriter
@@ -28,7 +29,7 @@ from corehq.apps.app_manager.xform import XFormError, XFormValidationError, Case
 from corehq.apps.builds.models import CommCareBuildConfig, BuildSpec
 from corehq.apps.hqmedia import upload
 from corehq.apps.users.decorators import require_permission
-from corehq.apps.users.models import Permissions, CommCareUser
+from corehq.apps.users.models import  CommCareUser
 from dimagi.utils.decorators.memoized import memoized
 from dimagi.utils.logging import notify_exception
 from dimagi.utils.subprocess_timeout import ProcessTimedOut
@@ -54,8 +55,6 @@ from django.conf import settings
 from dimagi.utils.web import get_url_base
 
 import json
-import urllib
-import urlparse
 from collections import defaultdict
 from couchdbkit.resource import ResourceNotFound
 from corehq.apps.app_manager.decorators import safe_download

@@ -4,7 +4,8 @@ import json
 import re
 import urllib
 from datetime import datetime
-from corehq.apps.hqwebapp.utils import InvitationView
+from corehq.apps.hqwebapp.invites import DomainInvitation, InvitationView
+from corehq.apps.hqwebapp.membership import DomainRemovalRecord, UserRole, AdminUserRole
 
 from dimagi.utils.couch.database import get_db
 from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm
@@ -24,8 +25,7 @@ from corehq.apps.prescriptions.models import Prescription
 from corehq.apps.domain.models import Domain
 from corehq.apps.users.decorators import require_permission
 from corehq.apps.users.forms import UserForm, ProjectSettingsForm
-from corehq.apps.users.models import CouchUser, CommCareUser, WebUser, \
-    RemoveWebUserRecord, UserRole, AdminUserRole, DomainInvitation
+from corehq.apps.users.models import CouchUser, CommCareUser, WebUser
 from corehq.apps.domain.decorators import login_and_domain_required, require_superuser, domain_admin_required
 from corehq.apps.orgs.models import Team
 from corehq.apps.reports.util import get_possible_reports
@@ -129,7 +129,7 @@ def remove_web_user(request, domain, couch_user_id):
 
 @require_can_edit_web_users
 def undo_remove_web_user(request, domain, record_id):
-    record = RemoveWebUserRecord.get(record_id)
+    record = DomainRemovalRecord.get(record_id)
     record.undo()
     messages.success(request, 'You have successfully restored {username}.'.format(
         username=WebUser.get_by_user_id(record.user_id).username
@@ -424,7 +424,6 @@ def change_my_password(request, domain, template="users/change_my_password.html"
 
 
 def _handle_user_form(request, domain, couch_user=None):
-    from corehq.apps.reports.util import get_possible_reports
     context = {}
     if couch_user:
         create_user = False
@@ -533,7 +532,6 @@ def user_domain_transfer(request, domain, prescription, template="users/domain_t
 
 @require_superuser
 def audit_logs(request, domain):
-    from auditcare.models import NavigationEventAudit
     usernames = [user.username for user in WebUser.by_domain(domain)]
     data = {}
     for username in usernames:
