@@ -5,50 +5,84 @@
         <th>Case Property</th>
     </tr>
 
-    [% for(var key in map) { %]
+    [%
+        var q_values = [];
+        for (var key in map) {
+            if (map.hasOwnProperty(key)) {
+                q_values.push(map[key]);
+            }
+        }
+
+        var all_qs = casexml.getQuestions("all");
+
+        for (var i = 0; i < all_qs.length; i++) {
+    %]
         [%
-            var nodeset = keyType === "nodeset" ? key : map[key];
-            var propertyName = keyType === "nodeset" ? map[key] : key;
+            var q = all_qs[i], nodeset = q.value, propertyName = null, selected = null;
+
+            if (keyType !== "nodeset") {
+                selected = q_values.indexOf(nodeset) > -1;
+                if (selected) {
+                    // Getting the key by value
+                    for(var key in map) {
+                        if(map.hasOwnProperty(key)) {
+                            if(map[key] === nodeset) {
+                                propertyName = key;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            else {
+                if (map) selected = nodeset in map;
+                if (selected) {
+                    propertyName = map[nodeset];
+                }
+            }
+
+            // don't display questions that aren't being used
+            if (!selected && !casexml.edit) {
+                continue;
+            }
+
+            // autofill the property name if empty
+            if (selected && !propertyName) {
+                propertyName = nodeset.split('/');
+                propertyName = propertyName[propertyName.length-1];
+            }
         %]
         <tr class="action-update">
             <td></td>
             <td>
-                [%= casexml.renderOptions(casexml.getQuestions("all"), nodeset, 'action-update-value') %]
+                [% if (casexml.edit) { %]
+                    <input type="checkbox" name="action-update-value"
+                        [% if (selected) { %] checked="checked"[% } %]
+                        value="[%= nodeset %]"/>
+                [% } %]
+                [% if (selected) { %]<b>[% } %]
+                [%= casexml.truncateLabel(q.label, q.tag === "hidden" ? " (Hidden)" : "") %]
+                [% if (selected) { %]</b>[% } %]
             </td>
             <td>
-                [%
-                    var value = nodeset.split('/');
-                    value = value[value.length-1];
-                %]
                 [% if (casexml.edit) { %]
-                    <input class="code" type="text" name="action-update-key" value="[%= propertyName || value %]" />
+                    <input class="code" type="text" name="action-update-key"
+                        value="[% if (selected) { %][%= propertyName %][% } %]" />
                 [% } else { %]
                     <code>[%= propertyName %]</code>
                 [% } %]
             </td>
             <td>
                 [% if (propertyName === "") { %]
-                    <span class="invalid">Can't be blank</span>
+                    <span class="invalid text-error">Can't be blank</span>
                 [% } else if (!/^[a-zA-Z][\w_-]*$/.test(propertyName)) { %]
-                    <span class="invalid">Must start with letter and contain only letters, numbers, '-', and '_': "[%= propertyName %]"</span>
+                    <span class="invalid text-error">Must start with letter and contain only letters, numbers, '-', and '_': "[%= propertyName %]"</span>
                 [% } else if (reservedWords.indexOf(propertyName) !== -1) { %]
-                    <span class="invalid">Can't name a case property "[%= propertyName %]"</span>
+                    <span class="invalid text-error">Can't name a case property "[%= propertyName %]"</span>
                 [% } else if (propertyName === 'name') { %]
                     <span class="label">The Case's Name</span>
-                [% } else if (propertyName !== value && showSuggestion) { %]
-                    <span class="">[%= value %]?</span>
                 [% } %]
             </td>
         </tr>
     [% } %]
-    [% if (casexml.edit) { %]
-        <tr class="action-update">
-            <td></td>
-            <td>
-                [%= casexml.renderOptions(casexml.getQuestions("all"), "", 'action-update-value') %]
-            </td>
-            <td><input class="code" type="text" name="action-update-key" /></td>
-        </tr>
-    [% } %]
-
 </table>

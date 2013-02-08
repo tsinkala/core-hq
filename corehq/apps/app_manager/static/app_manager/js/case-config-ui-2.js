@@ -475,28 +475,36 @@ var CaseXML = (function () {
                 return;
             }
 
+            var update_action = function(element, old_action, store_inverted){
+                store_inverted = store_inverted !== undefined ? store_inverted : false;
+                var ret = {};
+                $('.action-update', element).each(function () {
+                    var element_key = lookup(this, "action-update-key"),
+                        element_val = lookup(this, "action-update-value"),
+                        storing_key = !store_inverted ? element_key : element_val,
+                        storing_val = !store_inverted ? element_val : element_key;
+
+                    /**
+                     * Update the action only if the question property was selected OR if a case property was entered
+                     * and no previous case property for question existed, then auto select the question
+                     */
+                    if (element_key || element_val) {
+                        if ($(this).find('[name="action-update-value"]').is(':checked') ||
+                            (element_key && !old_action[storing_key])) {
+                            ret[storing_key] = storing_val;
+                        }
+                    }
+                });
+                return ret;
+            };
 
             if (id === "open_case") {
                 action.name_path = lookup(this, 'name_path');
                 action.external_id = lookup(this, 'external_id');
             } else if (id === "update_case") {
-                action.update = {};
-                $('.action-update', this).each(function () {
-                    var key = lookup(this, "action-update-key"),
-                        val = lookup(this, "action-update-value");
-                    if (key || val) {
-                        action.update[key] = val;
-                    }
-                });
+                action.update = update_action(this, actions[id].update);
             } else if (id === "case_preload") {
-                action.preload = {};
-                $('.action-update', this).each(function () {
-                    var propertyName = lookup(this, "action-update-key"),
-                        nodeset = lookup(this, "action-update-value");
-                    if (propertyName || nodeset) {
-                        action.preload[nodeset] = propertyName;
-                    }
-                });
+                action.preload = update_action(this, actions[id].preload, true);
             }
             action.condition = {
                 'type': 'always'
@@ -542,12 +550,10 @@ var CaseXML = (function () {
         }
     };
 
-    CaseXML.prototype.renderPropertyList = function (map, keyType, reservedWords, showSuggestion) {
-        showSuggestion = showSuggestion === undefined ? false : showSuggestion;
+    CaseXML.prototype.renderPropertyList = function (map, keyType, reservedWords) {
         return this.propertyList_ejs.render({
             map: map,
             keyType: keyType,
-            showSuggestion: showSuggestion,
             casexml: this,
             reservedWords: reservedWords
         });
