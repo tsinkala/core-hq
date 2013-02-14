@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import datetime, timedelta
 import json
 from django import template
@@ -6,6 +7,7 @@ from django.core.urlresolvers import reverse
 from django.utils.safestring import mark_safe
 from django.utils.translation import ugettext as _
 from corehq.apps.domain.models import Domain
+from corehq.apps.orgs.models import Organization
 from dimagi.utils.logging import notify_exception
 from dimagi.utils.web import json_handler
 
@@ -106,11 +108,29 @@ def domains_for_user(request, selected_domain=None):
                 domain_list = Domain.active_for_user(request.user)
                 notify_exception(request)
 
+        def make_element(domain, org=None):
+            default_url = reverse("domain_homepage", args=[domain.name])
+            if not org:
+                return '<li><a href="%s">%s</a></li>' % (default_url, domain.display_name())
+
+        org_domains = defaultdict(list)
+
         if len(domain_list) > 0:
             lst.append('<li class="nav-header">My Projects</li>')
+
             for domain in domain_list:
-                default_url = reverse("domain_homepage", args=[domain.name])
-                lst.append('<li><a href="%s">%s</a></li>' % (default_url, domain.long_display_name()))
+                who, _org = request.couch_user.domain_membership_through(domain.name)
+                if who == "user":
+                    lst.append(make_element(domain))
+                else:
+                    org_domains[_org].append(domain)
+
+            for o in org_domains:
+                org = Organization.get_by_name(o)
+                lst.append('<li class="nav-header">%s</li>' % (org.title))
+                for domain in org_domains[o]:
+                    lst.append(make_element(domain))
+
             lst.append('<li class="divider"></li>')
             lst.append('<li><a href="/a/public/">View Demo Project</a></li>')
         else:

@@ -1369,6 +1369,9 @@ class CommCareUser(CouchUser, CommCareMobileContactMixin, SingleMembershipMixin)
             lang = None
         return lang
 
+    def domain_membership_through(self, domain):
+        return "user", None if domain in self.domains else "no membership", None
+
 
 class OrgMembershipMixin(DocumentSchema):
     org_memberships = SchemaListProperty(OrgMembership)
@@ -1507,6 +1510,16 @@ class WebUser(CouchUser, MultiMembershipMixin, OrgMembershipMixin):
                 if domain not in domains:
                     domains.append(domain)
         return domains
+
+    def domain_membership_through(self, domain_name):
+        if domain_name not in self.get_domains():
+            return "no membership", None
+
+        if self.get_domain_membership(domain_name):
+            return "user", None
+
+        domain = Domain.get_by_name(domain_name)
+        return "org", domain.organization
 
     @memoized
     def has_permission(self, domain, permission, data=None):
