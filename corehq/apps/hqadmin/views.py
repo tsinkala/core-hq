@@ -149,6 +149,7 @@ def active_users(request):
 
 @require_superuser
 def global_report(request, template="hqadmin/global.html", as_export=False):
+    print XFormInstance.properties()
 
     def _flot_format(result):
         return int(datetime(year=result['key'][0], month=result['key'][1], day=1).strftime("%s"))*1000
@@ -231,6 +232,7 @@ def global_report(request, template="hqadmin/global.html", as_export=False):
     context['hide_filters'] = True
 
     return render(request, template, context)
+
 
 @require_superuser
 def commcare_version_report(request, template="hqadmin/commcare_version.html"):
