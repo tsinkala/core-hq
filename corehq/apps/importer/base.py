@@ -9,6 +9,8 @@ class ImportCases(DataInterface):
     asynchronous = False
 
     @classmethod
-    def show_in_navigation(cls, request, domain=None):
-        user = request.couch_user
-        return user.is_superuser or user.is_previewer() or domain == 'khayelitsha'
+    def show_in_navigation(cls, domain=None, couch_user=None, project=None):
+        if domain == 'khayelitsha':
+            return True
+
+        return couch_user.is_superuser or couch_user.is_previewer()

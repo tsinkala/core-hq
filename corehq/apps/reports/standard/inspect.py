@@ -468,7 +468,7 @@ create a couch doc as such:
         )
 
     @classmethod
-    def show_in_navigation(cls, request, domain=None):
+    def show_in_navigation(cls, domain=None, couch_user=None, project=None):
         if cls.get_config(domain):
             return True
         else:

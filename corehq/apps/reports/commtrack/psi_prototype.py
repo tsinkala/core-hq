@@ -12,7 +12,6 @@ import itertools
 from datetime import date, timedelta
 from corehq.apps.commtrack.models import CommtrackConfig, Product, StockReport
 from dimagi.utils.decorators.memoized import memoized
-import urllib
 from casexml.apps.case.models import CommCareCase
 from corehq.apps.commtrack import const
 from corehq.apps.commtrack.util import supply_point_type_categories
@@ -20,15 +19,14 @@ from corehq.apps.commtrack.util import supply_point_type_categories
 class CommtrackReportMixin(ProjectReport, ProjectReportParametersMixin):
 
     @classmethod
-    def show_in_navigation(cls, request, domain=None):
+    def show_in_navigation(cls, domain=None, couch_user=None, project=None):
         try:
-            return request.project.commtrack_enabled
+            return project.commtrack_enabled
         except Exception:
             if settings.DEBUG:
                 raise
             else:
-                domain = Domain.get_by_name(domain)
-                return domain.commtrack_enabled
+                return Domain.get_by_name(domain).commtrack_enabled
 
     @property
     def config(self):

@@ -610,7 +610,7 @@ class GenericReportView(CacheableRequestMixIn):
         return reverse(cls.dispatcher.name(), args=url_args+[cls.slug])
 
     @classmethod
-    def show_in_navigation(cls, request, domain=None):
+    def show_in_navigation(cls, domain=None, couch_user=None, project=None):
         return True
 
 class GenericTabularReport(GenericReportView):
