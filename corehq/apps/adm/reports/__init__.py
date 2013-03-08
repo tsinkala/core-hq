@@ -41,7 +41,7 @@ class ADMSectionView(GenericReportView):
 
     @property
     def default_report_url(self):
-        return reverse('default_adm_report', args=[self.request.project])
+        return reverse('default_adm_report', args=[self.request.domain])
 
     @classmethod
     def get_url(cls, domain=None, render_as=None, **kwargs):
@@ -140,16 +140,13 @@ class DefaultReportADMSectionView(GenericTabularReport, ADMSectionView, ProjectR
         )
 
     @classmethod
-    def override_navigation_list(cls, context):
-        current_slug = context.get('report', {}).get('sub_slug')
-        domain = context.get('domain')
-
+    def override_navigation_list(cls, domain=None):
         subreport_context = []
         subreports = ADMReport.get_default_subreports(domain, cls.adm_slug)
 
         if not subreports:
             subreport_context.append({
-                'url': '#', 
+                'url': '#',
                 'warning_label': 'No ADM Reports Configured',
             })
             return subreport_context
@@ -160,7 +157,6 @@ class DefaultReportADMSectionView(GenericTabularReport, ADMSectionView, ProjectR
             report_slug = key[-2]
             if cls.show_subreport_in_navigation(report_slug):
                 subreport_context.append({
-                    'is_active': current_slug == report_slug,
                     'url': cls.get_url(domain=domain, subreport=report_slug),
                     'description': entry.get('description', ''),
                     'title': entry.get('name', 'Untitled Report'),

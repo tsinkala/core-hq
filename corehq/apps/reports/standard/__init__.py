@@ -21,7 +21,7 @@ class ProjectReport(GenericReportView):
 
     @property
     def default_report_url(self):
-        return reverse('reports_home', args=[self.request.project])
+        return reverse('reports_home', args=[self.request.domain])
 
     def set_announcements(self):
         if self.request.couch_user:

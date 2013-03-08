@@ -20,7 +20,7 @@ class DataInterface(GenericReportView):
 
     @property
     def default_report_url(self):
-        return reverse('data_interfaces_default', args=[self.request.project])
+        return reverse('data_interfaces_default', args=[self.request.domain])
 
 class CaseReassignmentInterface(CaseListMixin, DataInterface):
     name = ugettext_noop("Reassign Cases")

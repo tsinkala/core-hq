@@ -404,9 +404,6 @@ class Domain(Document, HQBillingDomainMixin, SnapshotMixin):
     def readable_languages(self):
         return ', '.join(lang_lookup[lang] or lang for lang in self.languages())
 
-    def __unicode__(self):
-        return self.name
-
     @classmethod
     def get_by_name(cls, name, strict=False):
         if not name:
@@ -652,7 +649,9 @@ class Domain(Document, HQBillingDomainMixin, SnapshotMixin):
         else:
             return self.name
 
-    __str__ = long_display_name
+    def __str__(self):
+        return "<Domain '{0}'>".format(self.long_display_name())
+    __unicode__ = __str__
 
     def get_license_display(self):
         return LICENSES.get(self.license)

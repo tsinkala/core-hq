@@ -57,6 +57,12 @@ class UITab(object):
         self.domain = domain
         self.couch_user = couch_user
         self.project = project
+
+        self._params = {
+            'domain': self.domain,
+            'couch_user': self.couch_user,
+            'project': self.project
+        }
        
         # This should not be considered as part of the subclass API unless it
         # is necessary. Try to add new explicit parameters instead.
@@ -72,11 +78,7 @@ class UITab(object):
     @property
     def sidebar_items(self):
         if self.dispatcher:
-            context = {
-                'request': self._request,
-                'domain': self.domain,
-            }
-            return self.dispatcher.navigation_sections(context)
+            return self.dispatcher.navigation_sections(**self._params)
         else:
             return []
  
@@ -165,9 +167,9 @@ class ProjectReportsTab(UITab):
         ])]
 
         project_reports = ProjectReportDispatcher.navigation_sections(
-            context)
+            **self._params)
         custom_reports = CustomProjectReportDispatcher.navigation_sections(
-            context)
+            **self._params)
 
         return tools + project_reports + custom_reports
 

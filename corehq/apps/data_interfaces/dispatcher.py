@@ -14,5 +14,6 @@ class DataInterfaceDispatcher(ReportDispatcher):
     def dispatch(self, request, *args, **kwargs):
         return super(DataInterfaceDispatcher, self).dispatch(request, *args, **kwargs)
 
-    def permissions_check(self, report, request, domain=None):
-        return request.couch_user.can_edit_data(domain)
+    @classmethod
+    def permissions_check(self, report, domain=None, couch_user=None):
+        return couch_user.can_edit_data(domain)

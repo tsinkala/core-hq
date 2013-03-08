@@ -298,10 +298,16 @@ def get_possible_reports(domain):
     from corehq.apps.reports.dispatcher import (ProjectReportDispatcher,
         CustomProjectReportDispatcher)
     from corehq.apps.adm.dispatcher import ADMSectionDispatcher
+
+    kwargs = {
+        'domain': domain,
+        'check_permissions': False
+    }
+
     reports = []
-    report_map = ProjectReportDispatcher().get_reports(domain) + \
-                 CustomProjectReportDispatcher().get_reports(domain) +\
-                 ADMSectionDispatcher().get_reports(domain)
+    report_map = (ProjectReportDispatcher.get_reports(**kwargs) +
+                  CustomProjectReportDispatcher.get_reports(**kwargs) +
+                  ADMSectionDispatcher.get_reports(**kwargs))
     for heading, models in report_map:
         for model in models:
             reports.append({
