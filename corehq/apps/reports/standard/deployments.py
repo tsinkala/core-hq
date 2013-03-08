@@ -15,7 +15,7 @@ class DeploymentsReport(GenericTabularReport, ProjectReport, ProjectReportParame
     """
 
     @classmethod
-    def show_in_navigation(cls, domain=None, couch_user=None, project=None):
+    def is_visible(cls, domain=None, couch_user=None, project=None):
         return not project.commtrack_enabled
 
 class ApplicationStatusReport(DeploymentsReport):

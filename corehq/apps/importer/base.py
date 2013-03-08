@@ -9,7 +9,7 @@ class ImportCases(DataInterface):
     asynchronous = False
 
     @classmethod
-    def show_in_navigation(cls, domain=None, couch_user=None, project=None):
+    def is_visible(cls, domain=None, couch_user=None, project=None):
         if domain == 'khayelitsha':
             return True
 

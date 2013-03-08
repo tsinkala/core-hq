@@ -88,7 +88,7 @@ class ReportDispatcher(View):
             current_section = []
             for report in reports:
                 if (not check_permissions or
-                    report.show_in_navigation(domain=domain,
+                    report.is_visible(domain=domain,
                             couch_user=couch_user, project=project)):
                     current_section.append(report)
             if current_section:
@@ -184,7 +184,7 @@ class ReportDispatcher(View):
                 if not cls.permissions_check(class_name, domain=domain,
                         couch_user=couch_user):
                     continue
-                if report.show_in_navigation(domain=domain,
+                if report.is_visible(domain=domain,
                         couch_user=couch_user, project=project):
                     if hasattr(report, 'override_navigation_list'):
                         report_contexts.extend(

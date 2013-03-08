@@ -19,7 +19,7 @@ from corehq.apps.commtrack.util import supply_point_type_categories
 class CommtrackReportMixin(ProjectReport, ProjectReportParametersMixin):
 
     @classmethod
-    def show_in_navigation(cls, domain=None, couch_user=None, project=None):
+    def is_visible(cls, domain=None, couch_user=None, project=None):
         try:
             return project.commtrack_enabled
         except Exception:
