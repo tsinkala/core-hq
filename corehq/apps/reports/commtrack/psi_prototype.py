@@ -23,10 +23,7 @@ class CommtrackReportMixin(ProjectReport, ProjectReportParametersMixin):
         try:
             return project.commtrack_enabled
         except Exception:
-            if settings.DEBUG:
-                raise
-            else:
-                return Domain.get_by_name(domain).commtrack_enabled
+            return Domain.get_by_name(domain).commtrack_enabled
 
     @property
     def config(self):

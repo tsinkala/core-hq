@@ -104,14 +104,14 @@ class ReportDispatcher(View):
         
         """
         return dict((report.slug, report)
-                    for name, group in cls.get_reports(domain, **kwargs)
+                    for name, group in cls.get_reports(domain=domain, **kwargs)
                     for report in group)
 
     @classmethod
     def get_report(cls, report_slug, domain=None, **kwargs):
         """
         Returns the report class for `report_slug`, or None if no report is
-        found.
+        found.  Takes the same keyword arguments as get_reports().
 
         """
         return cls.get_reports_dict(domain, **kwargs).get(report_slug, None)

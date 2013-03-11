@@ -143,7 +143,7 @@ def project_settings(request, domain, template="domain/admin/project_settings.ht
                 # redirect in case settings changed that affect the visible
                 # navigation items
                 return HttpResponseRedirect(
-                        reverse(project_settings, args=[domain]))
+                        reverse(project_settings, args=[domain.name]))
             else:
                 messages.error(request, "There seems to have been an error saving your settings. Please try again!")
     else:

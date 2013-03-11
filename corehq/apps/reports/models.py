@@ -283,7 +283,8 @@ class ReportConfig(Document):
         case.
 
         """
-        return self._dispatcher.get_report(self.domain, self.report_slug)
+        return self._dispatcher.get_report(self.report_slug,
+                domain=self.domain, check_permissions=False)
 
     @property
     def report_name(self):

@@ -13,7 +13,6 @@ from corehq.apps.registration.forms import NewWebUserRegistrationForm, DomainReg
 from corehq.apps.registration.utils import *
 from dimagi.utils.couch.resource_conflict import retry_resource
 from dimagi.utils.web import get_ip
-from corehq.apps.domain.decorators import require_superuser
 from corehq.apps.orgs.models import Organization
 
 DOMAIN_TYPES = (
