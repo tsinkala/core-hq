@@ -776,8 +776,9 @@ def generate_case_export_payload(domain, include_closed, format, group, user_fil
         include_docs=False,
         wrapper=lambda r: r['id']
     )
+
     def stream_cases(all_case_ids):
-        for case_ids in chunked(all_case_ids, 500):
+        for case_ids in chunked(all_case_ids, 100):
             for case in CommCareCase.view('_all_docs', keys=case_ids, include_docs=True):
                 yield case
 
