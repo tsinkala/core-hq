@@ -159,6 +159,7 @@ def get_user_registration_source(req, domain, app_id):
     form = app.get_user_registration()
     return _get_xform_source(req, app, form, filename="User Registration.xml")
 
+
 def xform_display(req, domain, form_unique_id):
     try:
         form, app = Form.get_form(form_unique_id, and_app=True)
@@ -170,7 +171,8 @@ def xform_display(req, domain, form_unique_id):
 
     questions = form.get_questions(langs)
 
-    return HttpResponse(json.dumps(questions))
+    return json_response(questions)
+
 
 @login_and_domain_required
 def form_casexml(req, domain, form_unique_id):

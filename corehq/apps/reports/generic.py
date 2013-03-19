@@ -571,7 +571,8 @@ class GenericReportView(CacheableRequestMixIn):
             Intention: Not to be overridden in general.
             Renders the json version for the report, if available.
         """
-        return HttpResponse(json.dumps(self.json_dict))
+        return HttpResponse(json.dumps(self.json_dict),
+                            mimetype='application/json')
 
     @property
     @request_cache("export")
