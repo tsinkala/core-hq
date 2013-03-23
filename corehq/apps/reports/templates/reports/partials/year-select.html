@@ -1,7 +1,11 @@
-Year: <select name="year">
-{% with year as now_year %}
-{% for y in years %}
-<option value="{{ y }}" {% ifequal y now_year %}selected="selected"{% endifequal %}>{{ y }}</option>
-{% endfor %}
-{% endwith %}
-</select>
+{% load i18n %}
+<label class="control-label">{% trans "Year" %}</label>
+<div class="controls">
+    <select name="year">
+        {% with year as now_year %}
+            {% for y in years %}
+                <option value="{{ y }}" {% ifequal y now_year %}selected="selected"{% endifequal %}>{{ y }}</option>
+            {% endfor %}
+        {% endwith %}
+    </select>
+</div>
