@@ -111,9 +111,10 @@ class CustomExportHelper(object):
             HQGroupExportConfiguration.remove_custom_export(self.domain, self.custom_export.get_id)
 
     def get_response(self):
+        table_configuration = self.custom_export.table_configuration
 
         def show_deid_column():
-            for table_config in self.custom_export.table_configuration:
+            for table_config in table_configuration:
                 for col in table_config['column_configuration']:
                     if col['transform']:
                         return True
@@ -124,7 +125,7 @@ class CustomExportHelper(object):
             "deid_options": self.DEID.json_options,
             "presave": self.presave,
             "DeidExportReport_name": DeidExportReport.name,
-            "table_configuration": self.custom_export.table_configuration,
+            "table_configuration": table_configuration,
             "domain": self.domain,
             "show_deid_column": show_deid_column(),
             'helper': {
@@ -149,7 +150,8 @@ class FormCustomExportHelper(CustomExportHelper):
 
     def __init__(self, request, domain, export_id=None):
         super(FormCustomExportHelper, self).__init__(request, domain, export_id)
-        self.custom_export.app_id = request.GET.get('app_id')
+        if not self.custom_export.app_id:
+            self.custom_export.app_id = request.GET.get('app_id')
 
     def update_custom_params(self):
         p = self.post_data['custom_export']
