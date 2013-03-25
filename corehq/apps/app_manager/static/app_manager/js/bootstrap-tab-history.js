@@ -48,7 +48,7 @@ $(function () {
         }
     });
 
-    $('a[data-toggle="tab"]').on('shown', function (event) {
+    $('a[data-toggle="tab"]').on('show', function (event) {
 
         // Set the selected tab to be the current state. But don't update the URL.
         var url = event.target.href.split("#")[0];
@@ -64,7 +64,9 @@ $(function () {
         if ($('#' + tab).length === 0) {
             loadPage(url);
         }
-
+        if (!confirm('really?')) {
+            return false;
+        }
         // Don't set the state if we haven't changed tabs.
         if (State.data.tab != tab) {
             History.pushState({'tab': tab}, null, url);
