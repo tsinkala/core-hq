@@ -8,14 +8,19 @@ TEST_PROJECT = selenium.get_user('WEB_USER', exact=False).PROJECT
 #TEST_PROJECT = "my-test-project"
 
 
-class MobileUserCreationTestCase(SeleniumUtils, AdminUserTestCase):
+class MobileUserManagementTestCase(SeleniumUtils, AdminUserTestCase):
     settings_mobile_user = selenium.get_user('WEB_USER', exact=False)
 
     def setUp(self):
         """
         Hook up webdriver. Login in as Admin User
         """
-        super(MobileUserCreationTestCase, self).setUp()
+        super(MobileUserManagementTestCase, self).setUp()
+
+    def tearDown(self):
+        super(MobileUserManagementTestCase, self).tearDown()
+        # self._q("_Sign Out").click()
+        # self.driver.quit()
 
     def delete_mobile_user(self, user):
         """
@@ -23,8 +28,7 @@ class MobileUserCreationTestCase(SeleniumUtils, AdminUserTestCase):
         This method is called by test cases to delete users at will
         :param string: usernane without the domain part
         """
-        self._q("_%s" % TEST_PROJECT).click()
-        self._q("_Settings & Users").click()
+        self.go_to_mobile_workers_list(TEST_PROJECT)
         self._q('///*[@id="pagination-limit"]/option[5]').click() #Show all users (up to 50)
         self._q("_%s" % user).click()
         self._q("_Delete Mobile Worker").click()
@@ -32,10 +36,21 @@ class MobileUserCreationTestCase(SeleniumUtils, AdminUserTestCase):
         input.send_keys("I understand")
         self._q('//html/body/div[2]/div[2]/form/div[2]/button').click()
 
-    def tearDown(self):
-        super(MobileUserCreationTestCase, self).tearDown()
-        # self._q("_Sign Out").click()
-        # self.driver.quit()
+
+
+    def logout(self):
+        self._q("///nav[@id='hq-navigation-bar']/div/div[3]/a/span").click()
+        self._q("_Sign Out").click()
+
+    def login(self, login_name, password):
+        self.assertIn("Sign In", self.driver.page_source, "Not on login page.")
+
+        self._q("_Sign In").click()
+        self._q("#id_username").clear()
+        self._q("#id_username").send_keys(login_name)
+        self._q("#id_password").clear()
+        self._q("#id_password").send_keys(password)
+        self._q("///button[@type='submit']").click()
 
     def go_to_home(self):
         self._q("//html/body/div/header/div/div/hgroup/h1/a/img").click()
@@ -44,9 +59,12 @@ class MobileUserCreationTestCase(SeleniumUtils, AdminUserTestCase):
         self.go_to_home()
         self._q("_%s" % project).click()
 
-    def go_to_create_mobile_worker_page(self, project):
+    def go_to_mobile_workers_list(self, project):
         self.go_to_home_and_select_project(project)
         self._q("_Settings & Users").click()
+
+    def go_to_create_mobile_worker_page(self, project):
+        self.go_to_mobile_workers_list(project)
         self._q("_New Mobile Worker").click()
 
     def create_mobile_user(self, name):
@@ -92,19 +110,59 @@ class MobileUserCreationTestCase(SeleniumUtils, AdminUserTestCase):
 
 
 
-    # def htest_edit_mobile_user(self):
-    #     name = random_letters(8)
-    #     self.create_mobile_user(name)
-    #create mobile user
-    #sign out
-    #log in
-    #navigate to projects page
-    #select project, then
-    # self._q("_%s" % TEST_PROJECT).click()
-    # self._q("_Settings & Users").click()
-    # self._q('///*[@id="pagination-limit"]/option[5]').click() #Show all users (up to 50)
-    # self._q("_%s" % user).click()
-    # change first name, surname,etc. It would be good to try out invalid input like invalid email
+    def test_edit_mobile_user(self):
+        """
+
+
+        """
+        name = random_letters(8).lower()
+        self.create_mobile_user(name)
+        self.logout()
+        self.login(self.username, self.password)
+        self.go_to_mobile_workers_list(TEST_PROJECT)
+
+        # display possibly all mobile users in the project
+        self._q('///*[@id="pagination-limit"]/option[5]').click()
+        self._q("_%s" % name).click()
+        
+        first_name = "Lukundo"
+        last_name = "Sinkala"
+        bad_email = "grace.com"
+        correct_email = "grace@testmail.com"
+
+        self._q("#id_first_name").clear()
+        self._q("#id_first_name").send_keys(first_name)
+        self._q("#id_last_name").clear()        
+        self._q("#id_last_name").send_keys(last_name)
+        self._q("#id_email").clear()
+
+        # test invalid email format
+        self._q("#id_email").send_keys(bad_email)
+        self._q("//html/body/div/div[2]/div[2]/div/div/form/div/button").click()
+        self.assertIn('Enter a valid e-mail address.', self.driver.page_source, "Email error message should show")
+
+        self._q("#id_email").clear()
+
+        self._q("#id_email").send_keys(correct_email)
+        self._q("//html/body/div/div[2]/div[2]/div/div/form/div/button").click()
+
+        self.assertIn('Changes saved for user "%s@%s.commcarehq.org"' % (name, TEST_PROJECT), self.driver.page_source)
+        self.assertIn(first_name, self.driver.page_source)
+        self.assertIn(last_name, self.driver.page_source)
+        self.assertIn(correct_email, self.driver.page_source)
+
+        #test resetting password
+        self._q("_Reset Password").click()
+        self._q("#id_new_password1").clear()
+        self._q("#id_new_password1").send_keys("test2")
+        self._q("#id_new_password2").clear()
+        self._q("#id_new_password2").send_keys("test2")
+        self._q("//html/body/div/div[2]/div[2]/fieldset/div/form/div[2]/button").click()
+        self.assertIn("Password changed successfully!", self.driver.page_source)
+        self._q("_Close").click()
+        self.driver.get("/")  # get focus from dialog to main window
+        self.delete_mobile_user(name)
+
 
 
 
