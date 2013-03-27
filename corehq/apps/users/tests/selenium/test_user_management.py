@@ -37,27 +37,49 @@ class MobileUserCreationTestCase(SeleniumUtils, AdminUserTestCase):
         # self._q("_Sign Out").click()
         # self.driver.quit()
 
-    def test_create_mobile_user(self):
-        #todo: Test validation as well
+    def go_to_home(self):
+        self._q("//html/body/div/header/div/div/hgroup/h1/a/img").click()
 
-        self._q("//html/body/div/header/div/div/hgroup/h1/a/img").click() # Go to home page
-        self._q("_%s" % TEST_PROJECT).click() #find_element_by_link_text and click
+    def go_to_home_and_select_project(self, project):
+        self.go_to_home()
+        self._q("_%s" % project).click()
+
+    def go_to_create_mobile_worker_page(self, project):
+        self.go_to_home_and_select_project(project)
         self._q("_Settings & Users").click()
         self._q("_New Mobile Worker").click()
 
-        username = self._q("@username") #find element by name
-        password = self._q("@password")
-        repeat_password = self._q("@password_2")
-
-
-        #create mobile user with random user name
-        name = random_letters()
-        username.send_keys(name)
-        password.send_keys(name)
-        repeat_password.send_keys(name)
+    def create_mobile_user(self, name):
+        self.go_to_create_mobile_worker_page(TEST_PROJECT)
+        self._q("@username").send_keys(name)
+        self._q("@password").send_keys(name)
+        self._q("@password_2").send_keys(name)
         self._q("//html/body/div/div[2]/div[2]/form/div[2]/button").click()
 
+    def test_create_mobile_user_wth_invalid_password(self):
+        self.go_to_create_mobile_worker_page(TEST_PROJECT)
+
+        name = random_letters()
+        self._q("@username").send_keys(name)
+
+        # test blank password
+        self._q("@password").send_keys("")
+        self._q("@password_2").send_keys("")
+        self._q("//html/body/div/div[2]/div[2]/form/div[2]/button").click()
+        assert ('This field is required.' in self.driver.page_source)
+
+        # test mismatched passwords
+        self._q("@password").send_keys("one")
+        self._q("@password_2").send_keys("two")
+        self._q("//html/body/div/div[2]/div[2]/form/div[2]/button").click()
+        assert ('Passwords do not match' in self.driver.page_source)
+
+    def test_create_mobile_user(self):
+        name = random_letters()
+        self.create_mobile_user(name)
+
         assert ('User Information' in self.driver.page_source)
+
         #The username is lower cased when saved
         self.assertEquals(name.lower(), "%s" % self._q(".user_username").text.strip(), "User name not equal '%s'  <=> '%s'"  % (name.lower(), self._q(".user_username").text))
 
@@ -67,8 +89,12 @@ class MobileUserCreationTestCase(SeleniumUtils, AdminUserTestCase):
         # Done. delete the user from the database
         self.delete_mobile_user(name.lower())
 
-    def test_edit_mobile_user(self):
-        pass
+
+
+
+    # def htest_edit_mobile_user(self):
+    #     name = random_letters(8)
+    #     self.create_mobile_user(name)
     #create mobile user
     #sign out
     #log in
