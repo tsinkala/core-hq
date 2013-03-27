@@ -8,39 +8,19 @@ TEST_PROJECT = selenium.get_user('WEB_USER', exact=False).PROJECT
 #TEST_PROJECT = "my-test-project"
 
 
-class MobileUserManagementTestCase(SeleniumUtils, AdminUserTestCase):
+class AppBase(SeleniumUtils, AdminUserTestCase):
     settings_mobile_user = selenium.get_user('WEB_USER', exact=False)
 
     def setUp(self):
         """
         Hook up webdriver. Login in as Admin User
         """
-        super(MobileUserManagementTestCase, self).setUp()
+        super(AppBase, self).setUp()
 
     def tearDown(self):
-        super(MobileUserManagementTestCase, self).tearDown()
+        super(AppBase, self).tearDown()
         # self._q("_Sign Out").click()
         # self.driver.quit()
-
-    def delete_mobile_user(self, user):
-        """
-        Deletes a mobile user whose usernname is user (or rather user@project-name.commcarehq.org).
-        This method is called by test cases to delete users at will
-        :param string: usernane without the domain part
-        """
-        self.go_to_mobile_workers_list(TEST_PROJECT)
-        self._q('///*[@id="pagination-limit"]/option[5]').click() #Show all users (up to 50)
-        self._q("_%s" % user).click()
-        self._q("_Delete Mobile Worker").click()
-        input = self._q('//html/body/div[2]/div[2]/form/div/input')
-        input.send_keys("I understand")
-        self._q('//html/body/div[2]/div[2]/form/div[2]/button').click()
-
-
-
-    def logout(self):
-        self._q("///nav[@id='hq-navigation-bar']/div/div[3]/a/span").click()
-        self._q("_Sign Out").click()
 
     def login(self, login_name, password):
         self.assertIn("Sign In", self.driver.page_source, "Not on login page.")
@@ -51,6 +31,10 @@ class MobileUserManagementTestCase(SeleniumUtils, AdminUserTestCase):
         self._q("#id_password").clear()
         self._q("#id_password").send_keys(password)
         self._q("///button[@type='submit']").click()
+
+    def logout(self):
+        self._q("///nav[@id='hq-navigation-bar']/div/div[3]/a/span").click()
+        self._q("_Sign Out").click()
 
     def go_to_home(self):
         self._q("//html/body/div/header/div/div/hgroup/h1/a/img").click()
@@ -73,6 +57,22 @@ class MobileUserManagementTestCase(SeleniumUtils, AdminUserTestCase):
         self._q("@password").send_keys(name)
         self._q("@password_2").send_keys(name)
         self._q("//html/body/div/div[2]/div[2]/form/div[2]/button").click()
+
+    def delete_mobile_user(self, user):
+        """
+        Deletes a mobile user whose usernname is user (or rather user@project-name.commcarehq.org).
+        This method is called by test cases to delete users at will
+        """
+        self.go_to_mobile_workers_list(TEST_PROJECT)
+        self._q('///*[@id="pagination-limit"]/option[5]').click()  # Show all users (up to 50)
+        self._q("_%s" % user).click()
+        self._q("_Delete Mobile Worker").click()
+        input = self._q('//html/body/div[2]/div[2]/form/div/input')
+        input.send_keys("I understand")
+        self._q('//html/body/div[2]/div[2]/form/div[2]/button').click()
+
+
+class MobileUserManagementTestCase(AppBase):
 
     def test_create_mobile_user_wth_invalid_password(self):
         self.go_to_create_mobile_worker_page(TEST_PROJECT)
@@ -107,14 +107,7 @@ class MobileUserManagementTestCase(SeleniumUtils, AdminUserTestCase):
         # Done. delete the user from the database
         self.delete_mobile_user(name.lower())
 
-
-
-
     def test_edit_mobile_user(self):
-        """
-
-
-        """
         name = random_letters(8).lower()
         self.create_mobile_user(name)
         self.logout()
@@ -162,8 +155,4 @@ class MobileUserManagementTestCase(SeleniumUtils, AdminUserTestCase):
         self._q("_Close").click()
         self.driver.get("/")  # get focus from dialog to main window
         self.delete_mobile_user(name)
-
-
-
-
 
