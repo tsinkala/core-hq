@@ -184,5 +184,19 @@ class MobileUserManagementTestCase(AppBase):
         assert "Archived Users" in self.driver.page_source, "Archived Users' list might be empty"        
         self.delete_archived_mobile_user(name)
 
+class WebUserManagementTestCase(AppBase):
 
+    def test_add_web_user(self):
+        self.go_to_mobile_workers_list(TEST_PROJECT)
+        self._q("_Web Users").click()
+        self._q("_Invite Web User").click()
+        self._q("#id_email").clear()
+        self._q("#id_email").send_keys("bademail.com")
+        self._q("//html/body/div/div[2]/div[2]/form/div/button").click()
+        self.assertIn('Enter a valid e-mail address.', self.driver.page_source, "Email error message should show")
+        self._q("#id_email").clear()
+        name = random_letters()
+        self._q("#id_email").send_keys("%s@testit.com" % name)
+        self._q("//html/body/div/div[2]/div[2]/form/div/button").click()
+        assert "Invitation sent to %s@testit.com" % name in self.driver.page_source
 
