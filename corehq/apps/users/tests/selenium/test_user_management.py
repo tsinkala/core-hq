@@ -7,7 +7,6 @@ TEST_PROJECT = selenium.get_user('WEB_USER', exact=False).PROJECT
 #Uncomment below to define a project different from the one in settings
 #TEST_PROJECT = "my-test-project"
 
-
 class AppBase(SeleniumUtils, AdminUserTestCase):
     settings_mobile_user = selenium.get_user('WEB_USER', exact=False)
 
@@ -19,7 +18,7 @@ class AppBase(SeleniumUtils, AdminUserTestCase):
 
     def tearDown(self):
         super(AppBase, self).tearDown()
-        # self._q("_Sign Out").click()
+        # self.logout()
         # self.driver.quit()
 
     def login(self, login_name, password):
@@ -58,11 +57,12 @@ class AppBase(SeleniumUtils, AdminUserTestCase):
         self._q("@password_2").send_keys(name)
         self._q("//html/body/div/div[2]/div[2]/form/div[2]/button").click()
 
-    def delete_mobile_user(self, user):
+    def delete_active_mobile_user(self, user):
         """
         Deletes a mobile user whose usernname is user (or rather user@project-name.commcarehq.org).
         This method is called by test cases to delete users at will
         """
+        self.driver.get("/")
         self.go_to_mobile_workers_list(TEST_PROJECT)
         self._q('///*[@id="pagination-limit"]/option[5]').click()  # Show all users (up to 50)
         self._q("_%s" % user).click()
@@ -71,6 +71,20 @@ class AppBase(SeleniumUtils, AdminUserTestCase):
         input.send_keys("I understand")
         self._q('//html/body/div[2]/div[2]/form/div[2]/button').click()
 
+    def delete_archived_mobile_user(self, user):
+        """
+        Deletes a mobile user whose usernname is user (or rather user@project-name.commcarehq.org).
+        This method is called by test cases to delete users at will
+        """
+        self.driver.get("/")
+        self.go_to_mobile_workers_list(TEST_PROJECT)
+        self._q("_Show Archived Mobile Workers").click()
+        self._q('///*[@id="pagination-limit"]/option[5]').click()  # Show all users (up to 50)
+        self._q("_%s" % user).click()
+        self._q("_Delete Mobile Worker").click()
+        input = self._q('//html/body/div[2]/div[2]/form/div/input')
+        input.send_keys("I understand")
+        self._q('//html/body/div[2]/div[2]/form/div[2]/button').click()
 
 class MobileUserManagementTestCase(AppBase):
 
@@ -105,7 +119,7 @@ class MobileUserManagementTestCase(AppBase):
         self.assertEquals('@%s.commcarehq.org' % TEST_PROJECT, "%s" % self._q(".user_domainname").text, 'Domain name not equal @%s.commcarehq.org' % TEST_PROJECT)
 
         # Done. delete the user from the database
-        self.delete_mobile_user(name.lower())
+        self.delete_active_mobile_user(name.lower())
 
     def test_edit_mobile_user(self):
         name = random_letters(8).lower()
@@ -153,6 +167,22 @@ class MobileUserManagementTestCase(AppBase):
         self._q("//html/body/div/div[2]/div[2]/fieldset/div/form/div[2]/button").click()
         self.assertIn("Password changed successfully!", self.driver.page_source)
         self._q("_Close").click()
-        self.driver.get("/")  # get focus from dialog to main window
-        self.delete_mobile_user(name)
+        # self.driver.get("/")  # get focus from dialog to main window
+        self.delete_active_mobile_user(name)
+
+    def test_archive_mobile_user(self):
+        input_name = random_letters()
+
+        self.create_mobile_user(input_name)
+        self.go_to_mobile_workers_list(TEST_PROJECT)
+        self._q('///*[@id="pagination-limit"]/option[5]').click()
+        name = input_name.lower()
+        user_id = self._q("_%s" % name).get_attribute('outerHTML').split("/")[-3]
+        self._q("///a[@href='#%s']" % user_id).click()
+        assert "Are you sure you want to" in self.driver.page_source
+        self._q('///*[@id="%s"]/div[3]/a[1]' % user_id).click()
+        assert "Archived Users" in self.driver.page_source, "Archived Users' list might be empty"        
+        self.delete_archived_mobile_user(name)
+
+
 
