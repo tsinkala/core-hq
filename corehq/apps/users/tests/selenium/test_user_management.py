@@ -32,11 +32,13 @@ class AppBase(SeleniumUtils, AdminUserTestCase):
         self._q("///button[@type='submit']").click()
 
     def logout(self):
-        self._q("///nav[@id='hq-navigation-bar']/div/div[3]/a/span").click()
+        # click the primary dropdown to reveal 'Sing Out'
+        self._q("///a[@class='btn btn-primary dropdown-toggle']").click()
         self._q("_Sign Out").click()
 
     def go_to_home(self):
-        self._q("//html/body/div/header/div/div/hgroup/h1/a/img").click()
+        self.driver.get("/")
+        self._q("///a[@href='/homepage/']").click()
 
     def go_to_home_and_select_project(self, project):
         self.go_to_home()
@@ -55,7 +57,7 @@ class AppBase(SeleniumUtils, AdminUserTestCase):
         self._q("@username").send_keys(name)
         self._q("@password").send_keys(name)
         self._q("@password_2").send_keys(name)
-        self._q("//html/body/div/div[2]/div[2]/form/div[2]/button").click()
+        self._q("///button[text()='Create Mobile Worker']").click()
 
     def delete_active_mobile_user(self, user):
         """
@@ -67,9 +69,9 @@ class AppBase(SeleniumUtils, AdminUserTestCase):
         self._q('///*[@id="pagination-limit"]/option[5]').click()  # Show all users (up to 50)
         self._q("_%s" % user).click()
         self._q("_Delete Mobile Worker").click()
-        input = self._q('//html/body/div[2]/div[2]/form/div/input')
+        input = self._q('///input[@data-bind]')
         input.send_keys("I understand")
-        self._q('//html/body/div[2]/div[2]/form/div[2]/button').click()
+        self._q("///button[text()=' Delete Mobile Worker' and @type='submit']").click()
 
     def delete_archived_mobile_user(self, user):
         """
@@ -82,9 +84,9 @@ class AppBase(SeleniumUtils, AdminUserTestCase):
         self._q('///*[@id="pagination-limit"]/option[5]').click()  # Show all users (up to 50)
         self._q("_%s" % user).click()
         self._q("_Delete Mobile Worker").click()
-        input = self._q('//html/body/div[2]/div[2]/form/div/input')
+        input = self._q('///input[@data-bind]')
         input.send_keys("I understand")
-        self._q('//html/body/div[2]/div[2]/form/div[2]/button').click()
+        self._q("///button[text()=' Delete Mobile Worker' and @type='submit']").click()
 
 class MobileUserManagementTestCase(AppBase):
 
@@ -97,13 +99,13 @@ class MobileUserManagementTestCase(AppBase):
         # test blank password
         self._q("@password").send_keys("")
         self._q("@password_2").send_keys("")
-        self._q("//html/body/div/div[2]/div[2]/form/div[2]/button").click()
+        self._q("///button[text()='Create Mobile Worker']").click()
         assert ('This field is required.' in self.driver.page_source)
 
         # test mismatched passwords
         self._q("@password").send_keys("one")
         self._q("@password_2").send_keys("two")
-        self._q("//html/body/div/div[2]/div[2]/form/div[2]/button").click()
+        self._q("///button[text()='Create Mobile Worker']").click()
         assert ('Passwords do not match' in self.driver.page_source)
 
     def test_create_mobile_user(self):
@@ -145,13 +147,13 @@ class MobileUserManagementTestCase(AppBase):
 
         # test invalid email format
         self._q("#id_email").send_keys(bad_email)
-        self._q("//html/body/div/div[2]/div[2]/div/div/form/div/button").click()
+        self._q("///form[@name='user_details']//button[text()='Update Information']").click()
         self.assertIn('Enter a valid e-mail address.', self.driver.page_source, "Email error message should show")
 
         self._q("#id_email").clear()
 
         self._q("#id_email").send_keys(correct_email)
-        self._q("//html/body/div/div[2]/div[2]/div/div/form/div/button").click()
+        self._q("///form[@name='user_details']//button[text()='Update Information']").click()
 
         self.assertIn('Changes saved for user "%s@%s.commcarehq.org"' % (name, TEST_PROJECT), self.driver.page_source)
         self.assertIn(first_name, self.driver.page_source)
@@ -164,7 +166,7 @@ class MobileUserManagementTestCase(AppBase):
         self._q("#id_new_password1").send_keys("test2")
         self._q("#id_new_password2").clear()
         self._q("#id_new_password2").send_keys("test2")
-        self._q("//html/body/div/div[2]/div[2]/fieldset/div/form/div[2]/button").click()
+        self._q("///button[text()='Reset Password']").click()
         self.assertIn("Password changed successfully!", self.driver.page_source)
         self._q("_Close").click()
         # self.driver.get("/")  # get focus from dialog to main window
@@ -180,7 +182,7 @@ class MobileUserManagementTestCase(AppBase):
         user_id = self._q("_%s" % name).get_attribute('outerHTML').split("/")[-3]
         self._q("///a[@href='#%s']" % user_id).click()
         assert "Are you sure you want to" in self.driver.page_source
-        self._q('///*[@id="%s"]/div[3]/a[1]' % user_id).click()
+        self._q("///*[@id='%s']//a[text()='Archive']" % user_id).click()
         assert "Archived Users" in self.driver.page_source, "Archived Users' list might be empty"        
         self.delete_archived_mobile_user(name)
 
