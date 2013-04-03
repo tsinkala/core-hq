@@ -1,5 +1,6 @@
 from corehq.apps.hqwebapp.testcases import AdminUserTestCase
 from corehq.apps.hqwebapp import selenium
+from selenium.webdriver.support.ui import Select
 from .util import random_letters
 from .util import SeleniumUtils
 
@@ -8,7 +9,7 @@ TEST_PROJECT = selenium.get_user('WEB_USER', exact=False).PROJECT
 #TEST_PROJECT = "my-test-project"
 
 class AppBase(SeleniumUtils, AdminUserTestCase):
-    settings_mobile_user = selenium.get_user('WEB_USER', exact=False)
+    settings_web_user = selenium.get_user('WEB_USER', exact=False)
 
     def setUp(self):
         """
@@ -66,11 +67,13 @@ class AppBase(SeleniumUtils, AdminUserTestCase):
         """
         self.driver.get("/")
         self.go_to_mobile_workers_list(TEST_PROJECT)
-        self._q('///*[@id="pagination-limit"]/option[5]').click()  # Show all users (up to 50)
+        if user not in self.driver.page_source:
+            Select(self._q('#pagination-limit')).select_by_visible_text("50 users per page")  # Show all users (up to 50)
+
         self._q("_%s" % user).click()
         self._q("_Delete Mobile Worker").click()
-        input = self._q('///input[@data-bind]')
-        input.send_keys("I understand")
+        input_field = self._q('///input[@data-bind]')
+        input_field.send_keys("I understand")
         self._q("///button[text()=' Delete Mobile Worker' and @type='submit']").click()
 
     def delete_archived_mobile_user(self, user):
@@ -81,12 +84,24 @@ class AppBase(SeleniumUtils, AdminUserTestCase):
         self.driver.get("/")
         self.go_to_mobile_workers_list(TEST_PROJECT)
         self._q("_Show Archived Mobile Workers").click()
-        self._q('///*[@id="pagination-limit"]/option[5]').click()  # Show all users (up to 50)
+        if user not in self.driver.page_source:
+            Select(self._q('#pagination-limit')).select_by_visible_text("50 users per page")  # Show all users (up to 50)
         self._q("_%s" % user).click()
         self._q("_Delete Mobile Worker").click()
-        input = self._q('///input[@data-bind]')
-        input.send_keys("I understand")
+        input_field = self._q('///input[@data-bind]')
+        input_field.send_keys("I understand")
         self._q("///button[text()=' Delete Mobile Worker' and @type='submit']").click()
+
+    def assert_in_page_source(self, text, message=None):
+
+        # todo: implement logic to ensure that that self.driver.page_source has reached an updated state before
+        # doing the assertion
+        if message:
+            assert(text in self.driver.page_source, message)
+        else:
+            assert(text in self.driver.page_source)
+
+
 
 class MobileUserManagementTestCase(AppBase):
 
@@ -118,7 +133,8 @@ class MobileUserManagementTestCase(AppBase):
         self.assertEquals(name.lower(), "%s" % self._q(".user_username").text.strip(), "User name not equal '%s'  <=> '%s'"  % (name.lower(), self._q(".user_username").text))
 
         #The user_domain should be @PROJECT_NAME.commcarehq.org
-        self.assertEquals('@%s.commcarehq.org' % TEST_PROJECT, "%s" % self._q(".user_domainname").text, 'Domain name not equal @%s.commcarehq.org' % TEST_PROJECT)
+        self.assertEquals('@%s.commcarehq.org' % TEST_PROJECT, "%s" % self._q(".user_domainname").text,
+                          'Domain name not equal @%s.commcarehq.org' % TEST_PROJECT)
 
         # Done. delete the user from the database
         self.delete_active_mobile_user(name.lower())
@@ -131,9 +147,11 @@ class MobileUserManagementTestCase(AppBase):
         self.go_to_mobile_workers_list(TEST_PROJECT)
 
         # display possibly all mobile users in the project
-        self._q('///*[@id="pagination-limit"]/option[5]').click()
+        if name not in self.driver.page_source:
+            Select(self._q('#pagination-limit')).select_by_visible_text("50 users per page")
+
         self._q("_%s" % name).click()
-        
+
         first_name = "Lukundo"
         last_name = "Sinkala"
         bad_email = "grace.com"
@@ -141,18 +159,20 @@ class MobileUserManagementTestCase(AppBase):
 
         self._q("#id_first_name").clear()
         self._q("#id_first_name").send_keys(first_name)
-        self._q("#id_last_name").clear()        
+        self._q("#id_last_name").clear()
         self._q("#id_last_name").send_keys(last_name)
         self._q("#id_email").clear()
 
         # test invalid email format
         self._q("#id_email").send_keys(bad_email)
+        # make sure you select the right button (There is another hidden button with same text)
         self._q("///form[@name='user_details']//button[text()='Update Information']").click()
         self.assertIn('Enter a valid e-mail address.', self.driver.page_source, "Email error message should show")
 
         self._q("#id_email").clear()
 
         self._q("#id_email").send_keys(correct_email)
+        # make sure you select the right button (There is another hidden button with same text)
         self._q("///form[@name='user_details']//button[text()='Update Information']").click()
 
         self.assertIn('Changes saved for user "%s@%s.commcarehq.org"' % (name, TEST_PROJECT), self.driver.page_source)
@@ -177,14 +197,17 @@ class MobileUserManagementTestCase(AppBase):
 
         self.create_mobile_user(input_name)
         self.go_to_mobile_workers_list(TEST_PROJECT)
-        self._q('///*[@id="pagination-limit"]/option[5]').click()
         name = input_name.lower()
+        if name not in self.driver.page_source:
+            Select(self._q('#pagination-limit')).select_by_visible_text("50 users per page")
+
         user_id = self._q("_%s" % name).get_attribute('outerHTML').split("/")[-3]
         self._q("///a[@href='#%s']" % user_id).click()
         assert "Are you sure you want to" in self.driver.page_source
         self._q("///*[@id='%s']//a[text()='Archive']" % user_id).click()
         assert "Archived Users" in self.driver.page_source, "Archived Users' list might be empty"        
         self.delete_archived_mobile_user(name)
+
 
 class WebUserManagementTestCase(AppBase):
 
@@ -194,11 +217,39 @@ class WebUserManagementTestCase(AppBase):
         self._q("_Invite Web User").click()
         self._q("#id_email").clear()
         self._q("#id_email").send_keys("bademail.com")
-        self._q("//html/body/div/div[2]/div[2]/form/div/button").click()
+        self._q("///button[text()='Send Invite']").click()
         self.assertIn('Enter a valid e-mail address.', self.driver.page_source, "Email error message should show")
         self._q("#id_email").clear()
         name = random_letters()
         self._q("#id_email").send_keys("%s@testit.com" % name)
-        self._q("//html/body/div/div[2]/div[2]/form/div/button").click()
+        self._q("///button[text()='Send Invite']").click()
         assert "Invitation sent to %s@testit.com" % name in self.driver.page_source
 
+    def test_edit_web_user(self):
+        """
+        Tests editing Web User. For this test to work, the Web User defined in settings has to be an actual web user
+        created through email invitation
+        """
+        self.go_to_mobile_workers_list(TEST_PROJECT)
+        self._q("_Web Users").click()
+        short_user_name = self.settings_web_user.USERNAME.split('@')[0]
+        self._q("///a[*[text()='%s']]" % short_user_name).click()
+
+        # Let's make several edits and saves
+        users_details = [["Field Implementer", "David", "Livingstone"], ["App Editor", "Nelson", "Mandela"], ["Read Only", "Eliza", "Phiri"], ["Admin", "John", "Bwalya"]]
+        for user_details in users_details:
+            role, f_name, l_name = user_details
+            self._q("///a[*[text()='%s']]" % short_user_name).click()
+            self._q("#id_first_name").clear()
+            self._q("#id_first_name").send_keys(f_name)
+            self._q("#id_last_name").clear()
+            self._q("#id_last_name").send_keys(l_name)
+            Select(self._q("#id_role")).select_by_visible_text(role)
+            self._q("///button[text()='Update Information']").click()
+            self.assert_in_page_source("Changes saved for user")
+            self._q("_Web Users").click()
+            self.assert_in_page_source(role)
+            self.assert_in_page_source("%s %s" % (f_name, l_name))
+            # we want to test further that role, f_name, l_name appear in same record (table row)
+            assert self._q("///tr[td[contains(text(),'%(role)s')] and td[contains(text(),'%(f_name)s %(l_name)s')]]" %
+                       {'role':role, 'f_name':f_name, 'l_name':l_name})
