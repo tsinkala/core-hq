@@ -92,16 +92,6 @@ class AppBase(SeleniumUtils, AdminUserTestCase):
         input_field.send_keys("I understand")
         self._q("///button[text()=' Delete Mobile Worker' and @type='submit']").click()
 
-    def assert_in_page_source(self, text, message=None):
-
-        # todo: implement logic to ensure that that self.driver.page_source has reached an updated state before
-        # doing the assertion
-        if message:
-            assert(text in self.driver.page_source, message)
-        else:
-            assert(text in self.driver.page_source)
-
-
 
 class MobileUserManagementTestCase(AppBase):
 
@@ -236,7 +226,8 @@ class WebUserManagementTestCase(AppBase):
         self._q("///a[*[text()='%s']]" % short_user_name).click()
 
         # Let's make several edits and saves
-        users_details = [["Field Implementer", "David", "Livingstone"], ["App Editor", "Nelson", "Mandela"], ["Read Only", "Eliza", "Phiri"], ["Admin", "John", "Bwalya"]]
+        users_details = [["Field Implementer", "David", "Livingstone"], ["App Editor", "Nelson", "Mandela"],
+                         ["Read Only", "Eliza", "Phiri"], ["Admin", "John", "Bwalya"]]
         for user_details in users_details:
             role, f_name, l_name = user_details
             self._q("///a[*[text()='%s']]" % short_user_name).click()

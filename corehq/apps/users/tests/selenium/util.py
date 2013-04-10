@@ -25,6 +25,15 @@ class SeleniumUtils:
 
         return dr.find_elements_by_tag_name(str)
 
+    def assert_in_page_source(self, text, message=None):
+
+        # todo: implement logic to ensure that that self.driver.page_source has reached an updated state before
+        # doing the assertion
+        if message:
+            assert(text in self.driver.page_source, message)
+        else:
+            assert(text in self.driver.page_source)
+
 
 
 def random_letters(length=10):
