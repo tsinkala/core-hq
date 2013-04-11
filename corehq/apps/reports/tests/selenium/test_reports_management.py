@@ -25,6 +25,7 @@ class AppBase(SeleniumUtils, WebUserTestCase):
 
 
 class SaveReportsTestCase(AppBase):
+    # todo: find smarter way of waiting for tasks to complete rather calling time.sleep(x)
 
     def delete_saved_report(self, report, report_description, report_name):
         # wait for report to save and dialog to close
@@ -190,7 +191,4 @@ class SaveReportsTestCase(AppBase):
             self._q("///tr[td[contains(text(),'%(recipient_email)s')] and //a[contains(text(),'%(given_name)s (%(report_type)s)')]]//button[text()='Stop Sending']"
                     % {'given_name': report_name, 'report_type': report, 'recipient_email':recipient_email}).click()
 
-
             self.delete_saved_report(report, report_description, report_name)
-
-
