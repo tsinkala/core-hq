@@ -137,7 +137,9 @@ class ReportDispatcher(View):
     def navigation_sections(cls, context):
         request = context.get('request')
         domain = context.get('domain') or getattr(request, 'domain', None)
-
+        project = getattr(request, 'project', None)
+        couch_user = getattr(request, 'couch_user', None)
+        
         nav_context = []
 
         dispatcher = cls()  # uhoh
@@ -150,7 +152,8 @@ class ReportDispatcher(View):
                 class_name = report.__module__ + '.' + report.__name__
                 if not dispatcher.permissions_check(class_name, request, domain=domain):
                     continue
-                if report.show_in_navigation(request, domain=domain):
+                if report.show_in_navigation(
+                        domain=domain, project=project, user=couch_user):
                     if hasattr(report, 'override_navigation_list'):
                         report_contexts.extend(report.override_navigation_list(context))
                     else:
@@ -162,6 +165,8 @@ class ReportDispatcher(View):
                             'title': report.name,
                         })
             if report_contexts:
+                if hasattr(section_name, '__call__'):
+                    section_name = section_name(project, couch_user)
                 nav_context.append((section_name, report_contexts))
         return nav_context
 
