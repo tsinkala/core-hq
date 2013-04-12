@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # vim: ai ts=4 sts=4 et sw=4
+import logging
 from couchdbkit.ext.django.schema import *
 
 from datetime import datetime
@@ -9,7 +10,7 @@ from casexml.apps.case.models import CommCareCase
 from dimagi.utils.mixins import UnicodeMixIn
 from dimagi.utils.parsing import json_format_datetime
 from casexml.apps.case.signals import case_post_save
-from .mixin import CommCareMobileContactMixin, MobileBackend
+from .mixin import CommCareMobileContactMixin, MobileBackend, PhoneNumberInUseException
 from corehq.apps.sms import util as smsutil
 
 INCOMING = "I"
@@ -232,6 +233,16 @@ CALLBACK_MISSED = "MISSED"
 
 class ExpectedCallbackEventLog(EventLog):
     status = StringProperty(choices=[CALLBACK_PENDING,CALLBACK_RECEIVED,CALLBACK_MISSED])
+    
+    @classmethod
+    def by_domain(cls, domain, start_date=None, end_date={}):
+        """
+        Note that start_date and end_date are expected in JSON format.
+        """
+        return cls.view("sms/expected_callback_event",
+                        startkey=[domain, start_date],
+                        endkey=[domain, end_date],
+                        include_docs=True).all()
 
 FORWARD_ALL = "ALL"
 FORWARD_BY_KEYWORD = "KEYWORD"
@@ -287,15 +298,17 @@ class CommConnectCase(CommCareCase, CommCareMobileContactMixin):
             try:
                 self.delete_verified_number()
             except:
-                #TODO: Handle exception
-                pass
+                logging.exception("Could not delete verified number for owner %s" % self._id)
         elif contact_phone_number_is_verified:
             try:
-                self.delete_verified_number()
-                self.save_verified_number(self.domain, contact_phone_number, True, contact_backend_id, ivr_backend_id=contact_ivr_backend_id)
+                self.save_verified_number(self.domain, contact_phone_number, True, contact_backend_id, ivr_backend_id=contact_ivr_backend_id, only_one_number_allowed=True)
+            except PhoneNumberInUseException:
+                try:
+                    self.delete_verified_number()
+                except:
+                    logging.exception("Could not delete verified number for owner %s" % self._id)
             except:
-                #TODO: Handle exception
-                pass
+                logging.exception("Could not save verified number for owner %s" % self._id)
         else:
             #TODO: Start phone verification workflow
             pass
@@ -315,8 +328,8 @@ class CommConnectCase(CommCareCase, CommCareMobileContactMixin):
 
 
 def case_changed_receiver(sender, case, **kwargs):
-    c = CommConnectCase.get(case._id)
-    c.case_changed()
+    contact = CommConnectCase.wrap(case.to_json())
+    contact.case_changed()
 
 
 case_post_save.connect(case_changed_receiver, CommCareCase)

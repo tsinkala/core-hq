@@ -1,6 +1,7 @@
 import re
 from couchdbkit.ext.django.schema import *
 from django.conf import settings
+from dimagi.utils.couch.database import get_safe_write_kwargs
 from dimagi.utils.modules import try_import
 from corehq.apps.domain.models import Domain
 
@@ -222,7 +223,7 @@ class CommCareMobileContactMixin(object):
         if v is not None and (v.owner_doc_type != self.doc_type or v.owner_id != self._id):
             raise PhoneNumberInUseException("Phone number is already in use.")
     
-    def save_verified_number(self, domain, phone_number, verified, backend_id, ivr_backend_id=None):
+    def save_verified_number(self, domain, phone_number, verified, backend_id, ivr_backend_id=None, only_one_number_allowed=False):
         """
         Saves the given phone number as this contact's verified phone number.
         
@@ -232,7 +233,10 @@ class CommCareMobileContactMixin(object):
         """
         phone_number = strip_plus(phone_number)
         self.verify_unique_number(phone_number)
-        v = self.get_verified_number(phone_number)
+        if only_one_number_allowed:
+            v = self.get_verified_number()
+        else:
+            v = self.get_verified_number(phone_number)
         if v is None:
             v = VerifiedNumber(
                 owner_doc_type = self.doc_type,
@@ -243,7 +247,7 @@ class CommCareMobileContactMixin(object):
         v.verified = verified
         v.backend_id = backend_id
         v.ivr_backend_id = ivr_backend_id
-        v.save()
+        v.save(**get_safe_write_kwargs())
 
     def delete_verified_number(self, phone_number=None):
         """
