@@ -31,7 +31,6 @@ class SaveReportsTestCase(AppBase):
         # wait for report to save and dialog to close
         time.sleep(5)
         self._q("_My Saved Reports").click()
-        self._q("_My Saved Reports").click()
         # A row is created with our report, report name, and description. We don't want to keep it but delete it
         self._q("///tr[td[text()='%s'] and td[text()='%s'] and td[a[text()='%s']]]/td/button" %
                 (report, report_description, report_name)).click()
@@ -86,11 +85,7 @@ class SaveReportsTestCase(AppBase):
             # wait for report to save and dialog to close
             time.sleep(5)
 
-            # It appears there is a bug. During manual use my local Commcare I have to click twice
-            # before my new report can show on the list. On Commcare HQ behaviour is slightly different
             self._q("_My Saved Reports").click()
-            self._q("_My Saved Reports").click()
-
 
             # A row is created with our report, report name, and description. We don't want to keep it but delete it
             self._q("///tr[td[text()='%s'] and td[text()='%s'] and td[a[text()='%s']]]/td/button" %
@@ -165,7 +160,6 @@ class SaveReportsTestCase(AppBase):
             self._q("///*[text()='Save']").click()
             time.sleep(5)
 
-            self._q("_My Saved Reports").click()
             self._q("_My Saved Reports").click()
             self._q("_My Scheduled Reports").click()
             self._q("_Create a New Scheduled Report").click()
