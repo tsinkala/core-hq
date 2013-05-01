@@ -1,5 +1,6 @@
 from corehq.apps.hqwebapp.testcases import WebUserTestCase, AdminUserTestCase
 from corehq.apps.hqwebapp import selenium
+from celery.bin.celery import report
 from selenium.webdriver.support.ui import Select
 from corehq.apps.users.tests.selenium.util import SeleniumUtils, random_letters
 from corehq.apps.reports.tests.selenium.test_reports import report_names
@@ -44,6 +45,8 @@ class SaveReportsTestCase(AppBase):
 
     def open_and_partially_fill_save_dialog(self, report, report_description, report_name):
         self._q("_%s" % report).click()
+        self.wait_until_not(lambda driver: 'Fetching additional data' in driver.page_source,
+                            time=self.max_rpt_save_time)
         self.show_filters_if_hidden()
         self._q("///button[contains(text(), 'Save...')]").click()
         self._q("#name").clear()
@@ -76,17 +79,8 @@ class SaveReportsTestCase(AppBase):
             report_name = "My %s. %s" % (report, timestamp)
 
             report_description = "%s: Description for %s" % (timestamp, report)
-            self._q("_%s" % report).click()
-            self.wait_until_not(lambda driver: 'Fetching additional data' in driver.page_source,
-                                time=self.max_rpt_save_time)
-            self.show_filters_if_hidden()
 
-            # open the report save dialog
-            self._q("///button[contains(text(), 'Save...')]").click()
-            self._q("#name").clear()
-            self._q("#name").send_keys(report_name)
-            self._q("@description").clear()
-            self._q("@description").send_keys(report_description)
+            self.open_and_partially_fill_save_dialog(report, report_description, report_name)
             self._q("///*[text()='Save']").click()
 
             # wait for report to save and dialog to close
