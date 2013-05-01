@@ -24,12 +24,19 @@ class AppBase(SeleniumUtils, WebUserTestCase):
             toggle.click()
 
 
+def saving_report(driver):
+    if 'New Saved Report' in driver.page_source:
+        return True
+
+    return False
+
+
 class SaveReportsTestCase(AppBase):
-    # todo: find smarter way of waiting for tasks to complete rather calling time.sleep(x)
+    max_rpt_save_time = 5
 
     def delete_saved_report(self, report, report_description, report_name):
         # wait for report to save and dialog to close
-        time.sleep(5)
+        self.wait_until_not(saving_report, time=self.max_rpt_save_time)
         self._q("_My Saved Reports").click()
         # A row is created with our report, report name, and description. We don't want to keep it but delete it
         self._q("///tr[td[text()='%s'] and td[text()='%s'] and td[a[text()='%s']]]/td/button" %
@@ -59,7 +66,6 @@ class SaveReportsTestCase(AppBase):
         self._q("///*[text()='Save']").click()
         self.delete_saved_report(report, report_description, report_name)
 
-
     def test_save_with_default_date_options(self):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -71,7 +77,8 @@ class SaveReportsTestCase(AppBase):
 
             report_description = "%s: Description for %s" % (timestamp, report)
             self._q("_%s" % report).click()
-            time.sleep(5)
+            self.wait_until_not(lambda driver: 'Fetching additional data' in driver.page_source,
+                                time=self.max_rpt_save_time)
             self.show_filters_if_hidden()
 
             # open the report save dialog
@@ -83,7 +90,7 @@ class SaveReportsTestCase(AppBase):
             self._q("///*[text()='Save']").click()
 
             # wait for report to save and dialog to close
-            time.sleep(5)
+            self.wait_until_not(saving_report, time=self.max_rpt_save_time)
 
             self._q("_My Saved Reports").click()
 
@@ -158,7 +165,7 @@ class SaveReportsTestCase(AppBase):
             report_name, report_description = self.get_name_and_description(report)
             self.open_and_partially_fill_save_dialog(report, report_description, report_name)
             self._q("///*[text()='Save']").click()
-            time.sleep(5)
+            self.wait_until_not(saving_report, time=self.max_rpt_save_time)
 
             self._q("_My Saved Reports").click()
             self._q("_My Scheduled Reports").click()
@@ -170,7 +177,7 @@ class SaveReportsTestCase(AppBase):
             self._q("#submit-id-submit").click()
 
             # wait for some background process
-            time.sleep(5)
+            self.wait_until(lambda driver: "Scheduled report added!" in driver.page_source, time=self.max_rpt_save_time)
             self._q("_My Scheduled Reports").click()
 
             # a row shows with the report name, type, and recipients email
