@@ -4,7 +4,8 @@ from celery.bin.celery import report
 from selenium.webdriver.support.ui import Select
 from corehq.apps.users.tests.selenium.util import SeleniumUtils, random_letters
 from corehq.apps.reports.tests.selenium.test_reports import report_names
-from datetime import datetime, timedelta
+from selenium.common.exceptions import NoSuchElementException
+from datetime import datetime, timedelta, date
 import time
 from random import randrange
 
@@ -17,7 +18,7 @@ class AppBase(SeleniumUtils, WebUserTestCase):
         super(AppBase, self).setUp()
         self._q("_%s" % TEST_PROJECT).click()
         self._q('_Reports').click()
-        assert 'Project Reports' in self.driver.page_source
+        self.assertTrue('Project Reports' in self.driver.page_source)
 
     def show_filters_if_hidden(self):
         toggle = self._q("#toggle-report-filters")
@@ -31,22 +32,45 @@ def saving_report(driver):
 
     return False
 
+def loading_report(d):
+    try:
+        elem = d.find_element_by_xpath("//div[@class='hq-loading']")
+        return elem.is_displayed()
+    except NoSuchElementException:
+        pass
+
+    return False
+
 
 class SaveReportsTestCase(AppBase):
     max_rpt_save_time = 5
 
-    def delete_saved_report(self, report, report_description, report_name):
+    def assert_and_delete_saved_report(self, report, report_description, report_name, date_range=None):
+        """
+        Verifies that a report has been saved.Checks that a row exists containing the correct Report, Saved Report Name,
+        Description and Date Range
+
+        :param report:
+        :param report_description:
+        :param report_name:
+        :param date_range:
+        """
+
         # wait for report to save and dialog to close
         self.wait_until_not(saving_report, time=self.max_rpt_save_time)
         self._q("_My Saved Reports").click()
         # A row is created with our report, report name, and description. We don't want to keep it but delete it
-        self._q("///tr[td[text()='%s'] and td[text()='%s'] and td[a[text()='%s']]]/td/button" %
-                (report, report_description, report_name)).click()
+        element = self._q("///tr[td[text()='%s'] and td[text()='%s'] and td[a[text()='%s']]]/td/button" %
+                    (report, report_description, report_name))
+        self.assertTrue(element)
+        if date_range:
+            self.assertTrue(self._q("///tr[td[text()='%(report)s'] and td[a[text()='%(name)s']] and td[text()='%(description)s'] and td[text()='%(date_range)s'] ]/td/button" %
+                                    {'report':report, 'description':report_description, 'name':report_name, 'date_range':date_range}))
+        element.click()
 
     def open_and_partially_fill_save_dialog(self, report, report_description, report_name):
         self._q("_%s" % report).click()
-        self.wait_until_not(lambda driver: 'Fetching additional data' in driver.page_source,
-                            time=self.max_rpt_save_time)
+        self.wait_until_not(loading_report, time=self.max_rpt_save_time)
         self.show_filters_if_hidden()
         self._q("///button[contains(text(), 'Save...')]").click()
         self._q("#name").clear()
@@ -65,9 +89,9 @@ class SaveReportsTestCase(AppBase):
         report_description = "%s: Description for %s" % (timestamp, report)
         return report_name, report_description
 
-    def save_report_and_cleanup(self, report, report_description, report_name):
+    def save_report_and_assert_and_cleanup(self, report, report_description, report_name, date_range=None):
         self._q("///*[text()='Save']").click()
-        self.delete_saved_report(report, report_description, report_name)
+        self.assert_and_delete_saved_report(report, report_description, report_name, date_range)
 
     def test_save_with_default_date_options(self):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -89,8 +113,10 @@ class SaveReportsTestCase(AppBase):
             self._q("_My Saved Reports").click()
 
             # A row is created with our report, report name, and description. We don't want to keep it but delete it
-            self._q("///tr[td[text()='%s'] and td[text()='%s'] and td[a[text()='%s']]]/td/button" %
-                    (report, report_description, report_name)).click()
+            element = self._q("///tr[td[text()='%s'] and td[text()='%s'] and td[a[text()='%s']]]/td/button" %
+                              (report, report_description, report_name))
+            self.assertTrue(element)
+            element.click()
 
     def test_date_range_with_simple_select(self):
         """
@@ -101,7 +127,7 @@ class SaveReportsTestCase(AppBase):
         
         self.open_and_partially_fill_save_dialog(report, report_description, report_name)
         Select(self._q("@date_range")).select_by_visible_text("Last 30 days")
-        self.save_report_and_cleanup(report, report_description, report_name)
+        self.save_report_and_assert_and_cleanup(report, report_description, report_name, "Last 30 days")
 
     def test_date_range_with_arbitrary_days(self):
         """
@@ -115,7 +141,7 @@ class SaveReportsTestCase(AppBase):
         random_days = randrange(1, 100)
         self._q("@days").clear()
         self._q("@days").send_keys(random_days)
-        self.save_report_and_cleanup(report, report_description, report_name)
+        self.save_report_and_assert_and_cleanup(report, report_description, report_name, "Last %s days" % random_days)
 
     def test_date_range_with_arbitrary_start_date(self):
         """
@@ -130,7 +156,7 @@ class SaveReportsTestCase(AppBase):
         random_date = (datetime.now() - timedelta(randrange(1, 100))).strftime("%Y-%m-%d")
         self._q("///input[@name='start_date']").clear()
         self._q("///input[@name='start_date']").send_keys(random_date)
-        self.save_report_and_cleanup(report, report_description, report_name)
+        self.save_report_and_assert_and_cleanup(report, report_description, report_name, "Since %s" % random_date)
 
     def test_date_range_with_arbitrary_start_and_end_dates(self):
         """
@@ -150,7 +176,8 @@ class SaveReportsTestCase(AppBase):
         to_date = (datetime.now() - timedelta(randrange(50))).strftime("%Y-%m-%d")
         self._q("///input[@name='end_date']").clear()
         self._q("///input[@name='end_date']").send_keys(to_date)
-        self.save_report_and_cleanup(report, report_description, report_name)
+        self.save_report_and_assert_and_cleanup(report, report_description, report_name,
+                                                "From %s to %s" % (from_date, to_date))
 
     def test_schedule_saved_report(self):
 
@@ -175,7 +202,7 @@ class SaveReportsTestCase(AppBase):
             self._q("_My Scheduled Reports").click()
 
             # a row shows with the report name, type, and recipients email
-            assert (self._q("///tr[td[contains(text(),'%(recipient_email)s')] and //a[contains(text(),'%(given_name)s (%(report_type)s)')]]"
+            self.assertTrue (self._q("///tr[td[contains(text(),'%(recipient_email)s')] and //a[contains(text(),'%(given_name)s (%(report_type)s)')]]"
                     % {'given_name': report_name, 'report_type': report, 'recipient_email':recipient_email}), "Scheduled report not found")
             
             # Done. Delete the scheduled report
@@ -186,4 +213,4 @@ class SaveReportsTestCase(AppBase):
             self._q("///tr[td[contains(text(),'%(recipient_email)s')] and //a[contains(text(),'%(given_name)s (%(report_type)s)')]]//button[text()='Stop Sending']"
                     % {'given_name': report_name, 'report_type': report, 'recipient_email':recipient_email}).click()
 
-            self.delete_saved_report(report, report_description, report_name)
+            self.assert_and_delete_saved_report(report, report_description, report_name)
